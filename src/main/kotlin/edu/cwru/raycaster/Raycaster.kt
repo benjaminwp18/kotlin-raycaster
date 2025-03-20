@@ -43,13 +43,6 @@ val MAP_HEIGHT_PX = MAP_HEIGHT_BLOCKS * PX_PER_BLOCK
 
 fun Double.format(scale: Int) = "%.${scale}f".format(this)
 
-data class Vec2<T : Comparable<T>>(val x: T, val y: T)
-data class MutableVec2<T : Comparable<T>>(var x: T, var y: T) {
-    fun clamp(xMin: T, xMax: T, yMin: T, yMax: T) {
-        x = minOf(maxOf(x, xMin), xMax)
-        y = minOf(maxOf(y, yMin), yMax)
-    }
-}
 
 class Raycaster : Application() {
     private val keyMap: MutableMap<Char, Boolean> = KEYS.associateWith { false }.toMutableMap().withDefault { false }
