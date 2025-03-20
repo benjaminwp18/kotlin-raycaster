@@ -33,19 +33,33 @@ val KEY_VECTORS = mapOf(
     KeyCode.RIGHT to Vec2( PLAYER_MOVE_RATE, 0.0),
 ).withDefault { Vec2(0.0, 0.0) }
 
-val BLOCK_COLORS = mapOf(
-    0 to Color.WHITE,
-    1 to Color.BLACK,
-).withDefault { Color.PURPLE }  // Noticeable error color
+data class Block(val color: Color, val passable: Boolean) {
+    companion object {
+        private val CHAR_TO_BLOCK = mapOf(
+            ' ' to Block(Color.WHITE, true),
+            '#' to Block(Color.BLUE, false)
+        ).withDefault { Block(Color.PURPLE, false) }
 
-private val MAP = arrayOf(
-    intArrayOf(1, 1, 1, 1, 1, 1),
-    intArrayOf(1, 0, 0, 0, 0, 1),
-    intArrayOf(1, 0, 0, 0, 0, 1),
-    intArrayOf(1, 0, 0, 0, 0, 1),
-    intArrayOf(1, 0, 0, 0, 0, 1),
-    intArrayOf(1, 1, 1, 1, 1, 1)
-)
+        fun fromChar(c: Char) = CHAR_TO_BLOCK.getValue(c)
+    }
+}
+
+fun stringToBlockMap(str: String): Array<Array<Block>> {
+    val lines = str.split('\n')
+    return Array(lines.size) { i ->
+        Array(lines[i].length) { c ->
+            Block.fromChar(lines[i][c])
+        }
+    }
+}
+
+private val MAP = stringToBlockMap("""
+    ######
+    #    #
+    #    #
+    #    #
+    ######
+""".trimIndent())
 
 val MAP_WIDTH_BLOCKS = MAP[0].size
 val MAP_HEIGHT_BLOCKS = MAP.size
@@ -124,12 +138,12 @@ class Raycaster : Application() {
                     PLAYER_RADIUS_BLOCKS, MAP_HEIGHT_BLOCKS - PLAYER_RADIUS_BLOCKS
                 )
 
-                for ((r, row) in MAP.withIndex()) {
-                    for ((c, block) in row.withIndex()) {
+                for ((y, row) in MAP.withIndex()) {
+                    for ((x, block) in row.withIndex()) {
                         topDownView.prepRect(
-                            r * PX_PER_BLOCK, c * PX_PER_BLOCK,
+                            x * PX_PER_BLOCK, y * PX_PER_BLOCK,
                             PX_PER_BLOCK, PX_PER_BLOCK,
-                            BLOCK_COLORS.getValue(block)
+                            block.color
                         )
                     }
                 }
@@ -163,14 +177,14 @@ data class Color(val r: Int, val g: Int, val b: Int, val a: Int) {
         fun rgb(r: Int, g: Int, b: Int) = Color(r, g, b, 255)
         fun rgba(r: Int, g: Int, b: Int, a: Int) = Color(r, g, b, a)
 
-        val RED = Color.rgb(255, 0, 0)
-        val GREEN = Color.rgb(0, 255, 0)
-        val BLUE = Color.rgb(0, 0, 255)
-        val PURPLE = Color.rgb(255, 0, 255)
-        val AQUA = Color.rgb(0, 255, 255)
-        val YELLOW = Color.rgb(255, 255, 0)
-        val BLACK = Color.rgb(0, 0, 0)
-        val WHITE = Color.rgb(255, 255, 255)
+        val RED = rgb(255, 0, 0)
+        val GREEN = rgb(0, 255, 0)
+        val BLUE = rgb(0, 0, 255)
+        val PURPLE = rgb(255, 0, 255)
+        val AQUA = rgb(0, 255, 255)
+        val YELLOW = rgb(255, 255, 0)
+        val BLACK = rgb(0, 0, 0)
+        val WHITE = rgb(255, 255, 255)
     }
 }
 
@@ -215,6 +229,6 @@ class ImageCanvas private constructor(
     }
 }
 
-fun main(args: Array<String>) {
+fun main() {
     Application.launch(Raycaster::class.java)
 }
