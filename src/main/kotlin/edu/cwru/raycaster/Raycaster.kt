@@ -127,8 +127,15 @@ class Raycaster : Application() {
 
                 for ((key, pressed) in keyMap) {
                     if (pressed) {
-                        playerPosition.x += KEY_VECTORS.getValue(key).x * deltaSec
-                        playerPosition.y += KEY_VECTORS.getValue(key).y * deltaSec
+                        val newX = playerPosition.x + KEY_VECTORS.getValue(key).x * deltaSec
+                        val newY = playerPosition.y + KEY_VECTORS.getValue(key).y * deltaSec
+
+                        if (MAP[newX.toInt()][playerPosition.y.toInt()].passable) {
+                            playerPosition.x = newX
+                        }
+                        if (MAP[newX.toInt()][newY.toInt()].passable) {
+                            playerPosition.y = newY
+                        }
                     }
                 }
 
