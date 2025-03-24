@@ -47,7 +47,7 @@ fun Double.format(scale: Int) = "%.${scale}f".format(this)
 class Raycaster : Application() {
     private val keyMap: MutableMap<Char, Boolean> = KEYS.associateWith { false }.toMutableMap().withDefault { false }
     private var prevFrameTime = 0L
-    private val playerPosition = MutableVec2(1.0, 1.0)
+    private val playerPosition = MutableVec2Double(1.0, 1.0)
 
     override fun start(primaryStage: Stage) {
         val frameRateLabel = Label("No FPS data")

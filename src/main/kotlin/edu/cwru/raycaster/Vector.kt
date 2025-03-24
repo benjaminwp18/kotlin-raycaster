@@ -64,6 +64,9 @@ open class Vec2<T>(inputs: Iterable<T>) where T : Number {
 
 interface VectorOperations<T : Number> {
 
+  val x: T
+  val y: T
+
   operator fun plus(vec: Vec2<T>): Vec2<T>
 
   operator fun minus(vec: Vec2<T>): Vec2<T>
@@ -72,18 +75,14 @@ interface VectorOperations<T : Number> {
 
   operator fun div(value: T): Vec2<T>
 
+  val magnitude: Double
+
   fun dot(vec: Vec2<T>): T
 
   fun angleBetween(vec: Vec2<T>): Double
 }
 
-class Vec2Int(inputs: Iterable<Int>) : Vec2<Int>(inputs), VectorOperations<Int> {
-
-  constructor(x: Int, y: Int) : this(listOf(x, y))
-
-  constructor(p: Pair<Int, Int>) : this(p.first, p.second)
-
-  constructor(vec2: Vec2<Int>) : this(vec2.x, vec2.y)
+interface VectorOperationsInt : VectorOperations<Int> {
 
   override fun plus(vec: Vec2<Int>): Vec2Int {
     return Vec2Int(this.x + vec.x, this.y + vec.y)
@@ -110,48 +109,54 @@ class Vec2Int(inputs: Iterable<Int>) : Vec2<Int>(inputs), VectorOperations<Int> 
   }
 }
 
-class Vec2Float(inputs: Iterable<Float>) : Vec2<Float>(inputs), VectorOperations<Float> {
+interface VectorOperationsDouble : VectorOperations<Double> {
 
-  constructor(x: Float, y: Float) : this(listOf(x, y))
-
-  constructor(p: Pair<Float, Float>) : this(p.first, p.second)
-
-  constructor(vec2: Vec2<Float>) : this(vec2.x, vec2.y)
-
-  override fun plus(vec: Vec2<Float>): Vec2Float {
-    return Vec2Float(this.x + vec.x, this.y + vec.y)
+  override fun plus(vec: Vec2<Double>): Vec2Double {
+    return Vec2Double(this.x + vec.x, this.y + vec.y)
   }
 
-  override fun minus(vec: Vec2<Float>): Vec2Float {
-    return Vec2Float(this.x - vec.x, this.y - vec.y)
+  override fun minus(vec: Vec2<Double>): Vec2Double {
+    return Vec2Double(this.x - vec.x, this.y - vec.y)
   }
 
-  override fun times(value: Float): Vec2Float {
-    return Vec2Float(this.x * value, this.y * value)
+  override fun times(value: Double): Vec2Double {
+    return Vec2Double(this.x * value, this.y * value)
   }
 
-  override fun div(value: Float): Vec2Float {
-    return Vec2Float(this.x / value, this.y / value)
+  override fun div(value: Double): Vec2Double {
+    return Vec2Double(this.x / value, this.y / value)
   }
 
-  override fun dot(vec: Vec2<Float>): Float {
+  override fun dot(vec: Vec2<Double>): Double {
     return this.x * vec.x + this.y * vec.y
   }
 
-  override fun angleBetween(vec: Vec2<Float>): Double {
+  override fun angleBetween(vec: Vec2<Double>): Double {
     return acos(this.dot(vec) / (this.magnitude * vec.magnitude))
   }
+}
+
+class Vec2Int(inputs: Iterable<Int>) : Vec2<Int>(inputs), VectorOperationsInt {
+
+  constructor(x: Int, y: Int) : this(listOf(x, y))
+
+  constructor(p: Pair<Int, Int>) : this(p.first, p.second)
+
+  constructor(vec2: Vec2<Int>) : this(vec2.x, vec2.y)
+}
+
+class Vec2Double(inputs: Iterable<Double>) : Vec2<Double>(inputs), VectorOperationsDouble {
+
+  constructor(x: Double, y: Double) : this(listOf(x, y))
+
+  constructor(p: Pair<Double, Double>) : this(p.first, p.second)
+
+  constructor(vec2: Vec2<Double>) : this(vec2.x, vec2.y)
 }
 
 open class MutableVec2<T>(inputs: Iterable<T>) : Vec2<T>(inputs) where
 T : Comparable<T>,
 T : Number {
-
-  constructor(x: T, y: T) : this(listOf(x, y))
-
-  constructor(p: Pair<T, T>) : this(p.first, p.second)
-
-  constructor(vec2: Vec2<T>) : this(vec2.x, vec2.y)
 
   override var x: T = super.point.first
 
@@ -166,76 +171,33 @@ T : Number {
 
   fun clamp(xMin: T, xMax: T, yMin: T, yMax: T) {
     x = minOf(maxOf(x, xMin), xMax)
-    println(x)
     y = minOf(maxOf(y, yMin), yMax)
   }
 }
 
-class MutableVec2Int(inputs: Iterable<Int>) : MutableVec2<Int>(inputs), VectorOperations<Int> {
+class MutableVec2Int(inputs: Iterable<Int>) : MutableVec2<Int>(inputs), VectorOperationsInt {
 
   constructor(x: Int, y: Int) : this(listOf(x, y))
 
   constructor(p: Pair<Int, Int>) : this(p.first, p.second)
 
   constructor(vec2: Vec2<Int>) : this(vec2.x, vec2.y)
-
-  override fun plus(vec: Vec2<Int>): MutableVec2Int {
-    return MutableVec2Int(this.x + vec.x, this.y + vec.y)
-  }
-
-  override fun minus(vec: Vec2<Int>): MutableVec2Int {
-    return MutableVec2Int(this.x - vec.x, this.y - vec.y)
-  }
-
-  override fun times(value: Int): MutableVec2Int {
-    return MutableVec2Int(this.x * value, this.y * value)
-  }
-
-  override fun div(value: Int): MutableVec2Int {
-    return MutableVec2Int(this.x / value, this.y / value)
-  }
-
-  override fun dot(vec: Vec2<Int>): Int {
-    return this.x * vec.x + this.y * vec.y
-  }
-
-  override fun angleBetween(vec: Vec2<Int>): Double {
-    return acos(this.dot(vec) / (this.magnitude * vec.magnitude))
-  }
 }
 
-class MutableVec2Float(inputs: Iterable<Float>) :
-    MutableVec2<Float>(inputs), VectorOperations<Float> {
+class MutableVec2Double(inputs: Iterable<Double>) :
+    MutableVec2<Double>(inputs), VectorOperationsDouble {
 
-  constructor(x: Float, y: Float) : this(listOf(x, y))
+  constructor(x: Double, y: Double) : this(listOf(x, y))
 
-  constructor(p: Pair<Float, Float>) : this(p.first, p.second)
+  constructor(p: Pair<Double, Double>) : this(p.first, p.second)
 
-  constructor(vec2: Vec2<Float>) : this(vec2.x, vec2.y)
-
-  override fun plus(vec: Vec2<Float>): MutableVec2Float {
-    return MutableVec2Float(this.x + vec.x, this.y + vec.y)
-  }
-
-  override fun minus(vec: Vec2<Float>): MutableVec2Float {
-    return MutableVec2Float(this.x - vec.x, this.y - vec.y)
-  }
-
-  override fun times(value: Float): MutableVec2Float {
-    return MutableVec2Float(this.x * value, this.y * value)
-  }
-
-  override fun div(value: Float): MutableVec2Float {
-    return MutableVec2Float(this.x / value, this.y / value)
-  }
-
-  override fun dot(vec: Vec2<Float>): Float {
-    return this.x * vec.x + this.y * vec.y
-  }
-
-  override fun angleBetween(vec: Vec2<Float>): Double {
-    return acos(this.dot(vec) / (this.magnitude * vec.magnitude))
-  }
+  constructor(vec2: Vec2<Double>) : this(vec2.x, vec2.y)
 }
 
-fun main(args: Array<String>) {}
+fun main(args: Array<String>) {
+  println(Vec2Int(3, 4) + Vec2(3, 4))
+
+  var a = MutableVec2Int(3, 4)
+  a.x = 7
+  println(a)
+}
