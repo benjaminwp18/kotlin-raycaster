@@ -6,7 +6,7 @@ import kotlin.math.pow
 import kotlin.math.sqrt
 
 open class Vec2<T>(inputs: Iterable<T>) where T : Number {
-  private val point: Pair<T, T>
+  val point: Pair<T, T>
 
   init {
     var first: T? = null
@@ -153,17 +153,9 @@ T : Number {
 
   constructor(vec2: Vec2<T>) : this(vec2.x, vec2.y)
 
-  override var x: T
-    set(value) {
-      MutableVec2(value, this.y)
-    }
-    get() = super.x
+  override var x: T = super.point.first
 
-  override var y: T
-    set(value) {
-      MutableVec2(this.x, value)
-    }
-    get() = super.y
+  override var y: T = super.point.second
 
   operator fun set(index: Int, value: T) =
       when (index) {
@@ -174,6 +166,7 @@ T : Number {
 
   fun clamp(xMin: T, xMax: T, yMin: T, yMax: T) {
     x = minOf(maxOf(x, xMin), xMax)
+    println(x)
     y = minOf(maxOf(y, yMin), yMax)
   }
 }
