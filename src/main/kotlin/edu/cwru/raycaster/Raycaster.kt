@@ -161,7 +161,7 @@ class ImageCanvas private constructor(
     private val height: Int = pixelBuffer.height
 
     private fun coordsToIndex(x: Int, y: Int) = (x % width) + (y * width)
-    private fun indexToCoords(i: Int) = Vec2(i % width, i / width)
+    private fun indexToCoords(i: Int) = Vec2Int(i % width, i / width)
 
     fun prepPixel(x: Int, y: Int, color: Color) {
         pixels[coordsToIndex(x, y)] = color.toInt()
