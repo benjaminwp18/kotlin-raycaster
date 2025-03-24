@@ -83,7 +83,7 @@ class Vec2Int(inputs: Iterable<Int>) : Vec2<Int>(inputs), VectorOperations<Int> 
 
   constructor(p: Pair<Int, Int>) : this(p.first, p.second)
 
-  constructor(vec2: Vec2Int) : this(vec2.x, vec2.y)
+  constructor(vec2: Vec2<Int>) : this(vec2.x, vec2.y)
 
   override fun plus(vec: Vec2<Int>): Vec2Int {
     return Vec2Int(this.x + vec.x, this.y + vec.y)
@@ -116,7 +116,7 @@ class Vec2Float(inputs: Iterable<Float>) : Vec2<Float>(inputs), VectorOperations
 
   constructor(p: Pair<Float, Float>) : this(p.first, p.second)
 
-  constructor(vec2: Vec2Float) : this(vec2.x, vec2.y)
+  constructor(vec2: Vec2<Float>) : this(vec2.x, vec2.y)
 
   override fun plus(vec: Vec2<Float>): Vec2Float {
     return Vec2Float(this.x + vec.x, this.y + vec.y)
@@ -151,7 +151,7 @@ T : Number {
 
   constructor(p: Pair<T, T>) : this(p.first, p.second)
 
-  constructor(vec2: MutableVec2<T>) : this(vec2.x, vec2.y)
+  constructor(vec2: Vec2<T>) : this(vec2.x, vec2.y)
 
   override var x: T
     set(value) {
@@ -184,7 +184,7 @@ class MutableVec2Int(inputs: Iterable<Int>) : MutableVec2<Int>(inputs), VectorOp
 
   constructor(p: Pair<Int, Int>) : this(p.first, p.second)
 
-  constructor(vec2: Vec2Int) : this(vec2.x, vec2.y)
+  constructor(vec2: Vec2<Int>) : this(vec2.x, vec2.y)
 
   override fun plus(vec: Vec2<Int>): MutableVec2Int {
     return MutableVec2Int(this.x + vec.x, this.y + vec.y)
@@ -218,7 +218,7 @@ class MutableVec2Float(inputs: Iterable<Float>) :
 
   constructor(p: Pair<Float, Float>) : this(p.first, p.second)
 
-  constructor(vec2: Vec2Float) : this(vec2.x, vec2.y)
+  constructor(vec2: Vec2<Float>) : this(vec2.x, vec2.y)
 
   override fun plus(vec: Vec2<Float>): MutableVec2Float {
     return MutableVec2Float(this.x + vec.x, this.y + vec.y)
