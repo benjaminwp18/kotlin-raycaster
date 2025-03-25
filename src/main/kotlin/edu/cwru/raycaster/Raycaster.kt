@@ -17,21 +17,22 @@ import java.nio.IntBuffer
 const val NS_IN_S = 1_000_000_000.0
 
 const val PX_PER_BLOCK = 50
+const val BLOCKS_PER_PX = 1 / PX_PER_BLOCK
 
 const val PLAYER_MOVE_RATE = 3.0  // blocks / sec
-const val PLAYER_RADIUS_BLOCKS = 0.5
+const val PLAYER_RADIUS_BLOCKS = 0.25
 const val PLAYER_RADIUS_PX = (PLAYER_RADIUS_BLOCKS * PX_PER_BLOCK).toInt()
 
 val KEY_VECTORS = mapOf(
-    KeyCode.W     to Vec2(0.0, -PLAYER_MOVE_RATE),
-    KeyCode.UP    to Vec2(0.0, -PLAYER_MOVE_RATE),
-    KeyCode.S     to Vec2(0.0,  PLAYER_MOVE_RATE),
-    KeyCode.DOWN  to Vec2(0.0,  PLAYER_MOVE_RATE),
-    KeyCode.A     to Vec2(-PLAYER_MOVE_RATE, 0.0),
-    KeyCode.LEFT  to Vec2(-PLAYER_MOVE_RATE, 0.0),
-    KeyCode.D     to Vec2( PLAYER_MOVE_RATE, 0.0),
-    KeyCode.RIGHT to Vec2( PLAYER_MOVE_RATE, 0.0),
-).withDefault { Vec2(0.0, 0.0) }
+    KeyCode.W     to Vec2Double(0.0, -PLAYER_MOVE_RATE),
+    KeyCode.UP    to Vec2Double(0.0, -PLAYER_MOVE_RATE),
+    KeyCode.S     to Vec2Double(0.0,  PLAYER_MOVE_RATE),
+    KeyCode.DOWN  to Vec2Double(0.0,  PLAYER_MOVE_RATE),
+    KeyCode.A     to Vec2Double(-PLAYER_MOVE_RATE, 0.0),
+    KeyCode.LEFT  to Vec2Double(-PLAYER_MOVE_RATE, 0.0),
+    KeyCode.D     to Vec2Double( PLAYER_MOVE_RATE, 0.0),
+    KeyCode.RIGHT to Vec2Double( PLAYER_MOVE_RATE, 0.0),
+).withDefault { Vec2Double(0.0, 0.0) }
 
 data class Block(val color: Color, val passable: Boolean) {
     companion object {
@@ -46,9 +47,9 @@ data class Block(val color: Color, val passable: Boolean) {
 
 fun stringToBlockMap(str: String): Array<Array<Block>> {
     val lines = str.split('\n')
-    return Array(lines.size) { i ->
-        Array(lines[i].length) { c ->
-            Block.fromChar(lines[i][c])
+    return Array(lines.size) { y ->
+        Array(lines[y].length) { x ->
+            Block.fromChar(lines[y][x])
         }
     }
 }
@@ -56,7 +57,7 @@ fun stringToBlockMap(str: String): Array<Array<Block>> {
 private val MAP = stringToBlockMap("""
     ######
     #    #
-    #    #
+    #  # #
     #    #
     ######
 """.trimIndent())
@@ -76,7 +77,7 @@ class Raycaster : Application() {
     private val keyMap: MutableMap<KeyCode, Boolean> = KEY_VECTORS.keys.associateWith { false }
         .toMutableMap().withDefault { false }
     private var prevFrameTime = 0L
-    private val playerPosition = MutableVec2Double(1.0, 1.0)
+    private var playerPosition = MutableVec2Double(2.0, 2.0)
 
     override fun start(primaryStage: Stage) {
         val frameRateLabel = Label("No FPS data")
@@ -118,16 +119,19 @@ class Raycaster : Application() {
                 frameRateLabel.text = "FPS: ${frameRate.format(2)}\nδS: ${deltaSec.format(2)}"
                 prevFrameTime = now
 
+                // Don't walk through walls
                 for ((key, pressed) in keyMap) {
                     if (pressed) {
-                        val newX = playerPosition.x + KEY_VECTORS.getValue(key).x * deltaSec
-                        val newY = playerPosition.y + KEY_VECTORS.getValue(key).y * deltaSec
+                        val newPos = playerPosition + KEY_VECTORS.getValue(key) * deltaSec
+                        val topLeft = newPos - PLAYER_RADIUS_BLOCKS
+                        val bottomRight = newPos + PLAYER_RADIUS_BLOCKS
 
-                        if (MAP[newX.toInt()][playerPosition.y.toInt()].passable) {
-                            playerPosition.x = newX
-                        }
-                        if (MAP[newX.toInt()][newY.toInt()].passable) {
-                            playerPosition.y = newY
+                        // TODO: Snap to wall if you would clip it to avoid gaps
+                        if (MAP[topLeft.y.toInt()][topLeft.x.toInt()].passable and
+                            MAP[topLeft.y.toInt()][bottomRight.x.toInt()].passable and
+                            MAP[bottomRight.y.toInt()][topLeft.x.toInt()].passable and
+                            MAP[bottomRight.y.toInt()][bottomRight.x.toInt()].passable) {
+                            playerPosition = MutableVec2Double(newPos)
                         }
                     }
                 }
