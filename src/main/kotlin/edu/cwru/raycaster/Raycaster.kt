@@ -71,19 +71,12 @@ const val FPV_HEIGHT_PX = 400
 
 fun Double.format(scale: Int) = "%.${scale}f".format(this)
 
-data class Vec2<T : Comparable<T>>(val x: T, val y: T)
-data class MutableVec2<T : Comparable<T>>(var x: T, var y: T) {
-    fun clamp(xMin: T, xMax: T, yMin: T, yMax: T) {
-        x = minOf(maxOf(x, xMin), xMax)
-        y = minOf(maxOf(y, yMin), yMax)
-    }
-}
 
 class Raycaster : Application() {
     private val keyMap: MutableMap<KeyCode, Boolean> = KEY_VECTORS.keys.associateWith { false }
         .toMutableMap().withDefault { false }
     private var prevFrameTime = 0L
-    private val playerPosition = MutableVec2(1.0, 1.0)
+    private val playerPosition = MutableVec2Double(1.0, 1.0)
 
     override fun start(primaryStage: Stage) {
         val frameRateLabel = Label("No FPS data")
@@ -205,7 +198,7 @@ class ImageCanvas private constructor(
     private val height: Int = pixelBuffer.height
 
     private fun coordsToIndex(x: Int, y: Int) = (x % width) + (y * width)
-    private fun indexToCoords(i: Int) = Vec2(i % width, i / width)
+    private fun indexToCoords(i: Int) = Vec2Int(i % width, i / width)
 
     fun prepPixel(x: Int, y: Int, color: Color) {
         pixels[coordsToIndex(x, y)] = color.toInt()
