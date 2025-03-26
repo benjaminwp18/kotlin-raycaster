@@ -8,46 +8,76 @@ import javafx.scene.image.ImageView
 import javafx.scene.image.PixelBuffer
 import javafx.scene.image.PixelFormat
 import javafx.scene.image.WritableImage
+import javafx.scene.input.KeyCode
+import javafx.scene.layout.HBox
 import javafx.scene.layout.VBox
 import javafx.stage.Stage
 import java.nio.IntBuffer
 
-val KEYS = listOf('w', 'a', 's', 'd', 'q', 'e')
-
 const val NS_IN_S = 1_000_000_000.0
 
 const val PX_PER_BLOCK = 50
+const val BLOCKS_PER_PX = 1 / PX_PER_BLOCK
 
 const val PLAYER_MOVE_RATE = 3.0  // blocks / sec
-const val PLAYER_RADIUS_BLOCKS = 0.5
+const val PLAYER_RADIUS_BLOCKS = 0.25
 const val PLAYER_RADIUS_PX = (PLAYER_RADIUS_BLOCKS * PX_PER_BLOCK).toInt()
 
-val BLOCK_COLORS = mapOf(
-    0 to Color.WHITE,
-    1 to Color.BLACK,
-).withDefault { Color.PURPLE }  // Noticeable error color
+val KEY_VECTORS = mapOf(
+    KeyCode.W     to Vec2Double(0.0, -PLAYER_MOVE_RATE),
+    KeyCode.UP    to Vec2Double(0.0, -PLAYER_MOVE_RATE),
+    KeyCode.S     to Vec2Double(0.0,  PLAYER_MOVE_RATE),
+    KeyCode.DOWN  to Vec2Double(0.0,  PLAYER_MOVE_RATE),
+    KeyCode.A     to Vec2Double(-PLAYER_MOVE_RATE, 0.0),
+    KeyCode.LEFT  to Vec2Double(-PLAYER_MOVE_RATE, 0.0),
+    KeyCode.D     to Vec2Double( PLAYER_MOVE_RATE, 0.0),
+    KeyCode.RIGHT to Vec2Double( PLAYER_MOVE_RATE, 0.0),
+).withDefault { Vec2Double(0.0, 0.0) }
 
-private val MAP = arrayOf(
-    intArrayOf(1, 1, 1, 1, 1, 1),
-    intArrayOf(1, 0, 0, 0, 0, 1),
-    intArrayOf(1, 0, 0, 0, 0, 1),
-    intArrayOf(1, 0, 0, 0, 0, 1),
-    intArrayOf(1, 0, 0, 0, 0, 1),
-    intArrayOf(1, 1, 1, 1, 1, 1)
-)
+data class Block(val color: Color, val passable: Boolean) {
+    companion object {
+        private val CHAR_TO_BLOCK = mapOf(
+            ' ' to Block(Color.WHITE, true),
+            '#' to Block(Color.BLUE, false)
+        ).withDefault { Block(Color.PURPLE, false) }
+
+        fun fromChar(c: Char) = CHAR_TO_BLOCK.getValue(c)
+    }
+}
+
+fun stringToBlockMap(str: String): Array<Array<Block>> {
+    val lines = str.split('\n')
+    return Array(lines.size) { y ->
+        Array(lines[y].length) { x ->
+            Block.fromChar(lines[y][x])
+        }
+    }
+}
+
+private val MAP = stringToBlockMap("""
+    ######
+    #    #
+    #  # #
+    #    #
+    ######
+""".trimIndent())
 
 val MAP_WIDTH_BLOCKS = MAP[0].size
 val MAP_HEIGHT_BLOCKS = MAP.size
 val MAP_WIDTH_PX = MAP_WIDTH_BLOCKS * PX_PER_BLOCK
 val MAP_HEIGHT_PX = MAP_HEIGHT_BLOCKS * PX_PER_BLOCK
 
+const val FPV_WIDTH_PX = 800
+const val FPV_HEIGHT_PX = 400
+
 fun Double.format(scale: Int) = "%.${scale}f".format(this)
 
 
 class Raycaster : Application() {
-    private val keyMap: MutableMap<Char, Boolean> = KEYS.associateWith { false }.toMutableMap().withDefault { false }
+    private val keyMap: MutableMap<KeyCode, Boolean> = KEY_VECTORS.keys.associateWith { false }
+        .toMutableMap().withDefault { false }
     private var prevFrameTime = 0L
-    private val playerPosition = MutableVec2Double(1.0, 1.0)
+    private var playerPosition = MutableVec2Double(2.0, 2.0)
 
     override fun start(primaryStage: Stage) {
         val frameRateLabel = Label("No FPS data")
@@ -55,27 +85,26 @@ class Raycaster : Application() {
         primaryStage.title = "Kotlin Raycaster"
 
         val topDownView = ImageCanvas(MAP_WIDTH_PX, MAP_HEIGHT_PX)
+        val firstPersonView = ImageCanvas(FPV_WIDTH_PX, FPV_HEIGHT_PX)
 
         val root = VBox()
         root.children.add(frameRateLabel)
-        root.children.add(topDownView)
 
-        primaryStage.scene = Scene(root, 500.0, 500.0)
+        val viewBox = HBox()
+        root.children.add(viewBox)
+        viewBox.children.add(topDownView)
+        viewBox.children.add(firstPersonView)
+
+        primaryStage.scene = Scene(root, MAP_WIDTH_PX + FPV_WIDTH_PX + 10.0, FPV_HEIGHT_PX + 50.0)
 
         primaryStage.scene.setOnKeyPressed {
-            if (it.text.length == 1) {
-                val keyChar = it.text[0]
-                if (keyChar in keyMap.keys) {
-                    keyMap[keyChar] = true
-                }
+            if (it.code in keyMap.keys) {
+                keyMap[it.code] = true
             }
         }
         primaryStage.scene.setOnKeyReleased {
-            if (it.text.length == 1) {
-                val keyChar = it.text[0]
-                if (keyChar in keyMap.keys) {
-                    keyMap[keyChar] = false
-                }
+            if (it.code in keyMap.keys) {
+                keyMap[it.code] = false
             }
         }
 
@@ -90,17 +119,21 @@ class Raycaster : Application() {
                 frameRateLabel.text = "FPS: ${frameRate.format(2)}\nδS: ${deltaSec.format(2)}"
                 prevFrameTime = now
 
-                if (keyMap.getValue('w')) {
-                    playerPosition.y -= PLAYER_MOVE_RATE * deltaSec
-                }
-                if (keyMap.getValue('s')) {
-                    playerPosition.y += PLAYER_MOVE_RATE * deltaSec
-                }
-                if (keyMap.getValue('d')) {
-                    playerPosition.x += PLAYER_MOVE_RATE * deltaSec
-                }
-                if (keyMap.getValue('a')) {
-                    playerPosition.x -= PLAYER_MOVE_RATE * deltaSec
+                // Don't walk through walls
+                for ((key, pressed) in keyMap) {
+                    if (pressed) {
+                        val newPos = playerPosition + KEY_VECTORS.getValue(key) * deltaSec
+                        val topLeft = newPos - PLAYER_RADIUS_BLOCKS
+                        val bottomRight = newPos + PLAYER_RADIUS_BLOCKS
+
+                        // TODO: Snap to wall if you would clip it to avoid gaps
+                        if (MAP[topLeft.y.toInt()][topLeft.x.toInt()].passable and
+                            MAP[topLeft.y.toInt()][bottomRight.x.toInt()].passable and
+                            MAP[bottomRight.y.toInt()][topLeft.x.toInt()].passable and
+                            MAP[bottomRight.y.toInt()][bottomRight.x.toInt()].passable) {
+                            playerPosition = MutableVec2Double(newPos)
+                        }
+                    }
                 }
 
                 // Don't leave the map
@@ -109,12 +142,12 @@ class Raycaster : Application() {
                     PLAYER_RADIUS_BLOCKS, MAP_HEIGHT_BLOCKS - PLAYER_RADIUS_BLOCKS
                 )
 
-                for ((r, row) in MAP.withIndex()) {
-                    for ((c, block) in row.withIndex()) {
+                for ((y, row) in MAP.withIndex()) {
+                    for ((x, block) in row.withIndex()) {
                         topDownView.prepRect(
-                            r * PX_PER_BLOCK, c * PX_PER_BLOCK,
+                            x * PX_PER_BLOCK, y * PX_PER_BLOCK,
                             PX_PER_BLOCK, PX_PER_BLOCK,
-                            BLOCK_COLORS.getValue(block)
+                            block.color
                         )
                     }
                 }
@@ -127,6 +160,14 @@ class Raycaster : Application() {
                 )
 
                 topDownView.redraw()
+
+                firstPersonView.prepRect(
+                    0, 0,
+                    FPV_WIDTH_PX, FPV_HEIGHT_PX,
+                    Color.PURPLE
+                )
+
+                firstPersonView.redraw()
             }
         }.start()
     }
@@ -140,14 +181,14 @@ data class Color(val r: Int, val g: Int, val b: Int, val a: Int) {
         fun rgb(r: Int, g: Int, b: Int) = Color(r, g, b, 255)
         fun rgba(r: Int, g: Int, b: Int, a: Int) = Color(r, g, b, a)
 
-        val RED = Color.rgb(255, 0, 0)
-        val GREEN = Color.rgb(0, 255, 0)
-        val BLUE = Color.rgb(0, 0, 255)
-        val PURPLE = Color.rgb(255, 0, 255)
-        val AQUA = Color.rgb(0, 255, 255)
-        val YELLOW = Color.rgb(255, 255, 0)
-        val BLACK = Color.rgb(0, 0, 0)
-        val WHITE = Color.rgb(255, 255, 255)
+        val RED = rgb(255, 0, 0)
+        val GREEN = rgb(0, 255, 0)
+        val BLUE = rgb(0, 0, 255)
+        val PURPLE = rgb(255, 0, 255)
+        val AQUA = rgb(0, 255, 255)
+        val YELLOW = rgb(255, 255, 0)
+        val BLACK = rgb(0, 0, 0)
+        val WHITE = rgb(255, 255, 255)
     }
 }
 
@@ -192,6 +233,6 @@ class ImageCanvas private constructor(
     }
 }
 
-fun main(args: Array<String>) {
+fun main() {
     Application.launch(Raycaster::class.java)
 }

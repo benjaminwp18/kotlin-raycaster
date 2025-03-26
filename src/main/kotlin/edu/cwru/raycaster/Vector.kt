@@ -46,8 +46,13 @@ interface VectorOperations<T> where T : Comparable<T>, T : Number {
 
   operator fun plus(vec: Vec2<T>): Vec2<T>
   operator fun minus(vec: Vec2<T>): Vec2<T>
-  operator fun times(value: T): Vec2<T>
-  operator fun div(value: T): Vec2<T>
+  operator fun times(vec: Vec2<T>): Vec2<T>
+  operator fun div(vec: Vec2<T>): Vec2<T>
+
+  operator fun plus(value: T) = plus(Vec2(value, value))
+  operator fun minus(value: T) = minus(Vec2(value, value))
+  operator fun times(value: T) = times(Vec2(value, value))
+  operator fun div(value: T) = div(Vec2(value, value))
 
   fun dot(vec: Vec2<T>): T
   fun angleBetween(vec: Vec2<T>): Double
@@ -56,8 +61,8 @@ interface VectorOperations<T> where T : Comparable<T>, T : Number {
 interface VectorOperationsInt : VectorOperations<Int> {
   override fun plus(vec: Vec2<Int>) = Vec2Int(x + vec.x, y + vec.y)
   override fun minus(vec: Vec2<Int>) = Vec2Int(x - vec.x, y - vec.y)
-  override fun times(value: Int) = Vec2Int(x * value, y * value)
-  override fun div(value: Int) = Vec2Int(x / value, y / value)
+  override fun times(vec: Vec2<Int>) = Vec2Int(x * vec.x, y * vec.y)
+  override fun div(vec: Vec2<Int>) = Vec2Int(x / vec.x, y / vec.y)
 
   override fun dot(vec: Vec2<Int>) = x * vec.x + y * vec.y
   override fun angleBetween(vec: Vec2<Int>) = acos(dot(vec) / (magnitude * vec.magnitude))
@@ -66,8 +71,8 @@ interface VectorOperationsInt : VectorOperations<Int> {
 interface VectorOperationsDouble : VectorOperations<Double> {
   override fun plus(vec: Vec2<Double>) = Vec2Double(x + vec.x, y + vec.y)
   override fun minus(vec: Vec2<Double>) = Vec2Double(x - vec.x, y - vec.y)
-  override fun times(value: Double) = Vec2Double(x * value, y * value)
-  override fun div(value: Double) = Vec2Double(x / value, y / value)
+  override fun times(vec: Vec2<Double>) = Vec2Double(x * vec.x, y * vec.y)
+  override fun div(vec: Vec2<Double>) = Vec2Double(x / vec.x, y / vec.y)
 
   override fun dot(vec: Vec2<Double>) = x * vec.x + y * vec.y
   override fun angleBetween(vec: Vec2<Double>) = acos(dot(vec) / (magnitude * vec.magnitude))
