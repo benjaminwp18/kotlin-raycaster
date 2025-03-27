@@ -44,54 +44,60 @@ interface VectorOperations<T> where T : Comparable<T>, T : Number {
 
   val absoluteValue: Vec2<T>
 
-  val asVecInt: Vec2<Int>
-  val asVecDouble: Vec2<Double>
+  fun toVec2Int(): Vec2Int
+  fun toVec2Double(): Vec2Double
 
   operator fun plus(vec: Vec2<T>): Vec2<T>
   operator fun minus(vec: Vec2<T>): Vec2<T>
   operator fun times(vec: Vec2<T>): Vec2<T>
   operator fun div(vec: Vec2<T>): Vec2<T>
 
-  operator fun plus(value: T) = plus(Vec2(value, value))
-  operator fun minus(value: T) = minus(Vec2(value, value))
-  operator fun times(value: T) = times(Vec2(value, value))
-  operator fun div(value: T) = div(Vec2(value, value))
+  operator fun plus(value: T): Vec2<T>
+  operator fun minus(value: T): Vec2<T>
+  operator fun times(value: T): Vec2<T>
+  operator fun div(value: T): Vec2<T>
 
   fun dot(vec: Vec2<T>): T
   fun angleBetween(vec: Vec2<T>): Double
 }
 
 interface VectorOperationsInt : VectorOperations<Int> {
-  override val absoluteValue: Vec2<Int>
-    get() = Vec2(abs(x), abs(y))
+  override val absoluteValue: Vec2Int
+    get() = Vec2Int(abs(x), abs(y))
 
-  override val asVecInt: Vec2<Int>
-    get() = Vec2(x, y)
-  override val asVecDouble: Vec2<Double>
-    get() = Vec2(x.toDouble(), y.toDouble())
+  override fun toVec2Int() = Vec2Int(x, y)
+  override fun toVec2Double() = Vec2Double(x.toDouble(), y.toDouble())
 
   override fun plus(vec: Vec2<Int>) = Vec2Int(x + vec.x, y + vec.y)
   override fun minus(vec: Vec2<Int>) = Vec2Int(x - vec.x, y - vec.y)
   override fun times(vec: Vec2<Int>) = Vec2Int(x * vec.x, y * vec.y)
   override fun div(vec: Vec2<Int>) = Vec2Int(x / vec.x, y / vec.y)
 
+  override operator fun plus(value: Int) = plus(Vec2Int(value, value))
+  override operator fun minus(value: Int) = minus(Vec2Int(value, value))
+  override operator fun times(value: Int) = times(Vec2Int(value, value))
+  override operator fun div(value: Int) = div(Vec2Int(value, value))
+
   override fun dot(vec: Vec2<Int>) = x * vec.x + y * vec.y
   override fun angleBetween(vec: Vec2<Int>) = acos(dot(vec) / (magnitude * vec.magnitude))
 }
 
 interface VectorOperationsDouble : VectorOperations<Double> {
-  override val absoluteValue: Vec2<Double>
-    get() = Vec2(abs(x), abs(y))
+  override val absoluteValue: Vec2Double
+    get() = Vec2Double(abs(x), abs(y))
 
-  override val asVecInt: Vec2<Int>
-    get() = Vec2(x.toInt(), y.toInt())
-  override val asVecDouble: Vec2<Double>
-    get() = Vec2(x, y)
+  override fun toVec2Int() = Vec2Int(x.toInt(), y.toInt())
+  override fun toVec2Double() = Vec2Double(x, y)
 
   override fun plus(vec: Vec2<Double>) = Vec2Double(x + vec.x, y + vec.y)
   override fun minus(vec: Vec2<Double>) = Vec2Double(x - vec.x, y - vec.y)
   override fun times(vec: Vec2<Double>) = Vec2Double(x * vec.x, y * vec.y)
   override fun div(vec: Vec2<Double>) = Vec2Double(x / vec.x, y / vec.y)
+
+  override operator fun plus(value: Double) = plus(Vec2Double(value, value))
+  override operator fun minus(value: Double) = minus(Vec2Double(value, value))
+  override operator fun times(value: Double) = times(Vec2Double(value, value))
+  override operator fun div(value: Double) = div(Vec2Double(value, value))
 
   override fun dot(vec: Vec2<Double>) = x * vec.x + y * vec.y
   override fun angleBetween(vec: Vec2<Double>) = acos(dot(vec) / (magnitude * vec.magnitude))
@@ -102,7 +108,7 @@ interface VectorOperationsDouble : VectorOperations<Double> {
     val sinAngle = sin(angle)
     val xPrime = x * cosAngle - y * sinAngle
     val yPrime = x * sinAngle + y * cosAngle
-    return Vec2(xPrime, yPrime)
+    return Vec2Double(xPrime, yPrime)
   }
 }
 
@@ -148,6 +154,6 @@ class MutableVec2Double(inputs: Iterable<Double>) : MutableVec2<Double>(inputs),
   constructor(vec2: Vec2<Double>) : this(vec2.x, vec2.y)
 }
 
-operator fun Double.div(vec2: Vec2<Double>) : Vec2<Double> {
-  return Vec2(this / vec2.x, this / vec2.y)
+operator fun Double.div(vec2: Vec2<Double>) : Vec2Double {
+  return Vec2Double(this / vec2.x, this / vec2.y)
 }

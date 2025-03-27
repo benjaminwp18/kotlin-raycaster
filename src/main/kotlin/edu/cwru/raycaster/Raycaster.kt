@@ -3,21 +3,21 @@ package edu.cwru.raycaster
 import javafx.animation.AnimationTimer
 import javafx.application.Application
 import javafx.scene.Scene
+import javafx.scene.canvas.Canvas
+import javafx.scene.canvas.GraphicsContext
 import javafx.scene.control.Label
-import javafx.scene.image.ImageView
-import javafx.scene.image.PixelBuffer
-import javafx.scene.image.PixelFormat
-import javafx.scene.image.WritableImage
 import javafx.scene.input.KeyCode
 import javafx.scene.layout.HBox
 import javafx.scene.layout.VBox
 import javafx.stage.Stage
-import java.nio.IntBuffer
+import javafx.scene.paint.Color
+import javafx.scene.paint.Paint
+
 
 const val NS_IN_S = 1_000_000_000.0
 
 const val PX_PER_BLOCK = 50
-const val BLOCKS_PER_PX = 1 / PX_PER_BLOCK
+const val BLOCKS_PER_PX = 1.0 / PX_PER_BLOCK.toDouble()
 
 const val PLAYER_MOVE_RATE = 3.0  // blocks / sec
 const val PLAYER_RADIUS_BLOCKS = 0.25
@@ -38,7 +38,9 @@ data class Block(val color: Color, val passable: Boolean) {
     companion object {
         private val CHAR_TO_BLOCK = mapOf(
             ' ' to Block(Color.WHITE, true),
-            '#' to Block(Color.BLUE, false)
+            'B' to Block(Color.BLUE, false),
+            'G' to Block(Color.GREEN, false),
+            'O' to Block(Color.ORANGE, false),
         ).withDefault { Block(Color.PURPLE, false) }
 
         fun fromChar(c: Char) = CHAR_TO_BLOCK.getValue(c)
@@ -55,12 +57,15 @@ fun stringToBlockMap(str: String): Array<Array<Block>> {
 }
 
 private val MAP = stringToBlockMap("""
-    ######
-    #    #
-    #  # #
-    #    #
-    ######
+    BBBBBB
+    G    B
+    B  B B
+    O    B
+    BBBBBB
 """.trimIndent())
+
+val SKY_COLOR: Color = Color.LIGHTBLUE
+val FLOOR_COLOR: Color = Color.LIGHTGRAY
 
 val MAP_WIDTH_BLOCKS = MAP[0].size
 val MAP_HEIGHT_BLOCKS = MAP.size
@@ -72,28 +77,37 @@ const val FPV_HEIGHT_PX = 400
 
 fun Double.format(scale: Int) = "%.${scale}f".format(this)
 
+class Player {
+    var position = MutableVec2Double(2.0, 2.0)
+    var direction = MutableVec2Double(-1.0, 0.0)
+    var camPlane = MutableVec2Double(0.0, 1.0)
+}
+
+enum class WallType {
+    NorthSouth, EastWest
+}
 
 class Raycaster : Application() {
     private val keyMap: MutableMap<KeyCode, Boolean> = KEY_VECTORS.keys.associateWith { false }
         .toMutableMap().withDefault { false }
     private var prevFrameTime = 0L
-    private var playerPosition = MutableVec2Double(2.0, 2.0)
+    private val player = Player()
 
     override fun start(primaryStage: Stage) {
         val frameRateLabel = Label("No FPS data")
 
         primaryStage.title = "Kotlin Raycaster"
 
-        val topDownView = ImageCanvas(MAP_WIDTH_PX, MAP_HEIGHT_PX)
-        val firstPersonView = ImageCanvas(FPV_WIDTH_PX, FPV_HEIGHT_PX)
+        val topDownCanvas = ContextualCanvas(MAP_WIDTH_PX, MAP_HEIGHT_PX)
+        val firstPersonCanvas = ContextualCanvas(FPV_WIDTH_PX, FPV_HEIGHT_PX)
 
         val root = VBox()
         root.children.add(frameRateLabel)
 
         val viewBox = HBox()
         root.children.add(viewBox)
-        viewBox.children.add(topDownView)
-        viewBox.children.add(firstPersonView)
+        viewBox.children.add(topDownCanvas)
+        viewBox.children.add(firstPersonCanvas)
 
         primaryStage.scene = Scene(root, MAP_WIDTH_PX + FPV_WIDTH_PX + 10.0, FPV_HEIGHT_PX + 50.0)
 
@@ -122,7 +136,7 @@ class Raycaster : Application() {
                 // Don't walk through walls
                 for ((key, pressed) in keyMap) {
                     if (pressed) {
-                        val newPos = playerPosition + KEY_VECTORS.getValue(key) * deltaSec
+                        val newPos = player.position + KEY_VECTORS.getValue(key) * deltaSec
                         val topLeft = newPos - PLAYER_RADIUS_BLOCKS
                         val bottomRight = newPos + PLAYER_RADIUS_BLOCKS
 
@@ -131,20 +145,20 @@ class Raycaster : Application() {
                             MAP[topLeft.y.toInt()][bottomRight.x.toInt()].passable and
                             MAP[bottomRight.y.toInt()][topLeft.x.toInt()].passable and
                             MAP[bottomRight.y.toInt()][bottomRight.x.toInt()].passable) {
-                            playerPosition = MutableVec2Double(newPos)
+                            player.position = MutableVec2Double(newPos)
                         }
                     }
                 }
 
                 // Don't leave the map
-                playerPosition.clamp(
+                player.position.clamp(
                     PLAYER_RADIUS_BLOCKS, MAP_WIDTH_BLOCKS - PLAYER_RADIUS_BLOCKS,
                     PLAYER_RADIUS_BLOCKS, MAP_HEIGHT_BLOCKS - PLAYER_RADIUS_BLOCKS
                 )
 
                 for ((y, row) in MAP.withIndex()) {
                     for ((x, block) in row.withIndex()) {
-                        topDownView.prepRect(
+                        topDownCanvas.fillRect(
                             x * PX_PER_BLOCK, y * PX_PER_BLOCK,
                             PX_PER_BLOCK, PX_PER_BLOCK,
                             block.color
@@ -152,85 +166,148 @@ class Raycaster : Application() {
                     }
                 }
 
-                topDownView.prepRect(
-                    (playerPosition.x * PX_PER_BLOCK).toInt() - PLAYER_RADIUS_PX,
-                    (playerPosition.y * PX_PER_BLOCK).toInt() - PLAYER_RADIUS_PX,
+                topDownCanvas.fillRect(
+                    (player.position.x * PX_PER_BLOCK).toInt() - PLAYER_RADIUS_PX,
+                    (player.position.y * PX_PER_BLOCK).toInt() - PLAYER_RADIUS_PX,
                     PLAYER_RADIUS_PX * 2, PLAYER_RADIUS_PX * 2,
                     Color.RED
                 )
 
-                topDownView.redraw()
+                firstPersonCanvas.fillRect(0, 0, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, SKY_COLOR)
+                firstPersonCanvas.fillRect(0, FPV_HEIGHT_PX / 2, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, FLOOR_COLOR)
 
-                firstPersonView.prepRect(
-                    0, 0,
-                    FPV_WIDTH_PX, FPV_HEIGHT_PX,
-                    Color.PURPLE
-                )
+                for (screenX in 0 until FPV_WIDTH_PX) {
+                    val cameraX = 2 * screenX.toDouble() / FPV_WIDTH_PX - 1
 
-                firstPersonView.redraw()
+                    // TODO: This is probably be "+ player.camPlane". Fix when real movement is written.
+                    val rayDir = player.direction - player.camPlane * cameraX
+
+                    val rayMapPos = MutableVec2Int(player.position.toVec2Int())
+                    val sideDist = MutableVec2Double(0.0, 0.0)
+                    val deltaDist = (1.0 / rayDir).absoluteValue
+                    val step = MutableVec2Int(0, 0)
+                    var hitWall = false
+                    var hitSide = WallType.EastWest
+
+                    if (rayDir.x < 0) {
+                        step.x = -1
+                        sideDist.x = (player.position.x - rayMapPos.x) * deltaDist.x
+                    }
+                    else {
+                        step.x = 1
+                        sideDist.x = (-player.position.x + rayMapPos.x + 1.0) * deltaDist.x
+                    }
+                    if (rayDir.y < 0) {
+                        step.y = -1
+                        sideDist.y = (player.position.y - rayMapPos.y) * deltaDist.y
+                    }
+                    else {
+                        step.y = 1
+                        sideDist.y = (-player.position.y + rayMapPos.y + 1.0) * deltaDist.y
+                    }
+
+                    while (!hitWall) {
+                        if (sideDist.x < sideDist.y) {
+                            sideDist.x += deltaDist.x
+                            rayMapPos.x += step.x
+                            hitSide = WallType.EastWest
+                        }
+                        else {
+                            sideDist.y += deltaDist.y
+                            rayMapPos.y += step.y
+                            hitSide = WallType.NorthSouth
+                        }
+
+                        // Assumes only impassable tiles are walls
+                        // Will cause errors if map is not surrounded by walls
+                        if (!MAP[rayMapPos.y][rayMapPos.x].passable) {
+                            hitWall = true
+                        }
+                    }
+
+                    val perpWallDist =
+                        if (hitSide == WallType.EastWest) sideDist.x - deltaDist.x
+                        else sideDist.y - deltaDist.y
+                    val lineHeight = (FPV_HEIGHT_PX / perpWallDist).toInt()
+                    val drawStart = maxOf(FPV_HEIGHT_PX / 2 - lineHeight / 2, 0)
+
+                    var color = MAP[rayMapPos.y][rayMapPos.x].color
+
+                    if (hitSide == WallType.NorthSouth) {
+                        color = color.darker()
+                    }
+
+                    firstPersonCanvas.fillRect(screenX, drawStart, 1, lineHeight, color)
+
+                    // Tag the block the player is in
+                    val playerBlock = player.position.toVec2Int()
+                    topDownCanvas.fillRect(playerBlock.x * PX_PER_BLOCK, playerBlock.y * PX_PER_BLOCK, 10, 10, Color.PURPLE)
+
+                    // Tag the blocks the rays hit
+                    topDownCanvas.fillRect(rayMapPos.x * PX_PER_BLOCK, rayMapPos.y * PX_PER_BLOCK, 10, 10, Color.GREEN)
+
+                    // Draw lines for rays
+                    val playerPosPx = (player.position * PX_PER_BLOCK.toDouble()).toVec2Int()
+                    val rayDirPx = playerPosPx + (rayDir * perpWallDist * PX_PER_BLOCK.toDouble()).toVec2Int()
+                    topDownCanvas.strokeLine(
+                        playerPosPx.x, playerPosPx.y,
+                        rayDirPx.x, rayDirPx.y,
+                        Color.rgb(255, 0, (255.0 * (screenX / FPV_WIDTH_PX.toDouble())).toInt())
+                    )
+
+                    // Draw line in the player's direction
+                    val playerDirPx = playerPosPx + (player.direction * 20.0).toVec2Int()
+                    topDownCanvas.strokeLine(playerPosPx.x, playerPosPx.y, playerDirPx.x, playerDirPx.y, Color.BLACK)
+
+                    // Draw camera plane
+                    val playerPlaneEndPx = playerDirPx + (player.camPlane * 20.0).toVec2Int()
+                    val playerPlaneStartPx = playerDirPx - (player.camPlane * 20.0).toVec2Int()
+                    topDownCanvas.strokeLine(playerPlaneStartPx.x, playerPlaneStartPx.y, playerPlaneEndPx.x, playerPlaneEndPx.y, Color.BLACK)
+                }
             }
         }.start()
     }
 }
 
-// TODO: replace with extension function on JavaFX Color? Maybe not cause it stores everything as floats?
-data class Color(val r: Int, val g: Int, val b: Int, val a: Int) {
-    fun toInt() = (a shl 24) or (r shl 16) or (g shl 8) or b
-
-    companion object {
-        fun rgb(r: Int, g: Int, b: Int) = Color(r, g, b, 255)
-        fun rgba(r: Int, g: Int, b: Int, a: Int) = Color(r, g, b, a)
-
-        val RED = rgb(255, 0, 0)
-        val GREEN = rgb(0, 255, 0)
-        val BLUE = rgb(0, 0, 255)
-        val PURPLE = rgb(255, 0, 255)
-        val AQUA = rgb(0, 255, 255)
-        val YELLOW = rgb(255, 255, 0)
-        val BLACK = rgb(0, 0, 0)
-        val WHITE = rgb(255, 255, 255)
-    }
-}
-
-class ImageCanvas private constructor(
-    private val pixelBuffer: PixelBuffer<IntBuffer>
-) : ImageView(WritableImage(pixelBuffer)) {
-    // https://foojay.io/today/high-performance-rendering-in-javafx/
-
-    private val pixels: IntArray = pixelBuffer.buffer.array()
-    private val width: Int = pixelBuffer.width
-    private val height: Int = pixelBuffer.height
-
-    private fun coordsToIndex(x: Int, y: Int) = (x % width) + (y * width)
-    private fun indexToCoords(i: Int) = Vec2Int(i % width, i / width)
-
-    fun prepPixel(x: Int, y: Int, color: Color) {
-        pixels[coordsToIndex(x, y)] = color.toInt()
-    }
-
-    fun prepRect(x: Int, y: Int, w: Int, h: Int, color: Color) {
-        for (r in y until y + h) {
-            for (c in x until x + w) {
-                prepPixel(c, r, color)
-            }
+class ContextualCanvas(private val width: Int, private val height: Int): Canvas(width.toDouble(), height.toDouble()) {
+    val context: GraphicsContext = graphicsContext2D
+    var fill: Paint
+        get() = context.fill
+        set(color) {
+            context.fill = color
         }
-    }
-
-    fun redraw() {
-        // Tell the buffer that the entire area needs redrawing
-        // TODO: keep track of areas that have been "prepped" and only redraw those?
-        pixelBuffer.updateBuffer { b: PixelBuffer<IntBuffer>? -> null }
-    }
-
-    companion object {
-        // Use companion invoke to construct buffer before calling super()
-        // TODO: make less janky
-        operator fun invoke(width: Int, height: Int): ImageCanvas {
-            val buffer = IntBuffer.allocate(width * height)
-            val pixelBuffer = PixelBuffer(width, height, buffer, PixelFormat.getIntArgbPreInstance())
-            return ImageCanvas(pixelBuffer)
+    var stroke: Paint
+        get() = context.stroke
+        set(color) {
+            context.stroke = color
         }
+
+
+    fun fillRect(x: Double, y: Double, w: Double, h: Double, color: Color? = null) {
+        val oldFill = fill
+        if (color != null) {
+            fill = color
+        }
+        context.fillRect(x, y, w, h)
+        fill = oldFill
     }
+    fun fillRect(x: Number, y: Number, w: Number, h: Number, color: Color? = null) =
+        fillRect(x.toDouble(), y.toDouble(), w.toDouble(), h.toDouble(), color)
+
+    fun strokeLine(x1: Double, y1: Double, x2: Double, y2: Double, color: Color? = null) {
+        val oldStroke = stroke
+        if (color != null) {
+            stroke = color
+        }
+        context.strokeLine(x1, y1, x2, y2)
+        stroke = oldStroke
+    }
+    fun strokeLine(x1: Number, y1: Number, x2: Number, y2: Number, color: Color? = null) =
+        strokeLine(x1.toDouble(), y1.toDouble(), x2.toDouble(), y2.toDouble(), color)
+    fun strokeLine(p1: Vec2Double, p2: Vec2Double, color: Color? = null) =
+        strokeLine(p1.x, p1.y, p2.x, p2.y, color)
+    fun strokeLine(p1: Vec2Int, p2: Vec2Int, color: Color? = null) =
+        strokeLine(p1.x, p1.y, p2.x, p2.y, color)
 }
 
 fun main() {
