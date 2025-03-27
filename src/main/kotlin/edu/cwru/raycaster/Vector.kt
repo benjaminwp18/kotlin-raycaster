@@ -44,6 +44,9 @@ interface VectorOperations<T> where T : Comparable<T>, T : Number {
 
   val absoluteValue: Vec2<T>
 
+  val asVecInt: Vec2<Int>
+  val asVecDouble: Vec2<Double>
+
   operator fun plus(vec: Vec2<T>): Vec2<T>
   operator fun minus(vec: Vec2<T>): Vec2<T>
   operator fun times(vec: Vec2<T>): Vec2<T>
@@ -62,6 +65,11 @@ interface VectorOperationsInt : VectorOperations<Int> {
   override val absoluteValue: Vec2<Int>
     get() = Vec2(abs(x), abs(y))
 
+  override val asVecInt: Vec2<Int>
+    get() = Vec2(x, y)
+  override val asVecDouble: Vec2<Double>
+    get() = Vec2(x.toDouble(), y.toDouble())
+
   override fun plus(vec: Vec2<Int>) = Vec2Int(x + vec.x, y + vec.y)
   override fun minus(vec: Vec2<Int>) = Vec2Int(x - vec.x, y - vec.y)
   override fun times(vec: Vec2<Int>) = Vec2Int(x * vec.x, y * vec.y)
@@ -74,6 +82,11 @@ interface VectorOperationsInt : VectorOperations<Int> {
 interface VectorOperationsDouble : VectorOperations<Double> {
   override val absoluteValue: Vec2<Double>
     get() = Vec2(abs(x), abs(y))
+
+  override val asVecInt: Vec2<Int>
+    get() = Vec2(x.toInt(), y.toInt())
+  override val asVecDouble: Vec2<Double>
+    get() = Vec2(x, y)
 
   override fun plus(vec: Vec2<Double>) = Vec2Double(x + vec.x, y + vec.y)
   override fun minus(vec: Vec2<Double>) = Vec2Double(x - vec.x, y - vec.y)
