@@ -1,9 +1,7 @@
 package edu.cwru.raycaster
 
 import java.security.InvalidParameterException
-import kotlin.math.acos
-import kotlin.math.pow
-import kotlin.math.sqrt
+import kotlin.math.*
 
 open class Vec2<T>(inputs: Iterable<T>) where T : Comparable<T>, T : Number {
   val point: Pair<T, T> = Pair(inputs.elementAt(0), inputs.elementAt(1))
@@ -76,6 +74,15 @@ interface VectorOperationsDouble : VectorOperations<Double> {
 
   override fun dot(vec: Vec2<Double>) = x * vec.x + y * vec.y
   override fun angleBetween(vec: Vec2<Double>) = acos(dot(vec) / (magnitude * vec.magnitude))
+
+  fun rotate(angle: Double): Vec2<Double> {
+    //    In Radians
+    val cosAngle = cos(angle)
+    val sinAngle = sin(angle)
+    val xPrime = x * cosAngle - y * sinAngle
+    val yPrime = x * sinAngle + y * cosAngle
+    return Vec2(xPrime, yPrime)
+  }
 }
 
 class Vec2Int(inputs: Iterable<Int>) : Vec2<Int>(inputs), VectorOperationsInt {
@@ -118,15 +125,4 @@ class MutableVec2Double(inputs: Iterable<Double>) : MutableVec2<Double>(inputs),
   constructor(x: Double, y: Double) : this(listOf(x, y))
   constructor(p: Pair<Double, Double>) : this(p.first, p.second)
   constructor(vec2: Vec2<Double>) : this(vec2.x, vec2.y)
-}
-
-fun main() {
-  println(Vec2Int(3, 4) + Vec2(3, 4))
-
-  val a = MutableVec2Int(3, 4)
-  a.x = 7
-  println(a)
-
-  val (x, y) = a
-  println("$x, $y")
 }
