@@ -59,8 +59,8 @@ interface VectorOperations<T> where T : Comparable<T>, T : Number {
 }
 
 interface VectorOperationsInt : VectorOperations<Int> {
-  override val absoluteValue: Vec2<Int>
-    get() = Vec2(abs(x), abs(y))
+  override val absoluteValue: Vec2Int
+    get() = Vec2Int(abs(x), abs(y))
 
   override fun plus(vec: Vec2<Int>) = Vec2Int(x + vec.x, y + vec.y)
   override fun minus(vec: Vec2<Int>) = Vec2Int(x - vec.x, y - vec.y)
@@ -72,8 +72,8 @@ interface VectorOperationsInt : VectorOperations<Int> {
 }
 
 interface VectorOperationsDouble : VectorOperations<Double> {
-  override val absoluteValue: Vec2<Double>
-    get() = Vec2(abs(x), abs(y))
+  override val absoluteValue: Vec2Double
+    get() = Vec2Double(abs(x), abs(y))
 
   override fun plus(vec: Vec2<Double>) = Vec2Double(x + vec.x, y + vec.y)
   override fun minus(vec: Vec2<Double>) = Vec2Double(x - vec.x, y - vec.y)
@@ -89,7 +89,7 @@ interface VectorOperationsDouble : VectorOperations<Double> {
     val sinAngle = sin(angle)
     val xPrime = x * cosAngle - y * sinAngle
     val yPrime = x * sinAngle + y * cosAngle
-    return Vec2(xPrime, yPrime)
+    return Vec2Double(xPrime, yPrime)
   }
 }
 
@@ -135,6 +135,6 @@ class MutableVec2Double(inputs: Iterable<Double>) : MutableVec2<Double>(inputs),
   constructor(vec2: Vec2<Double>) : this(vec2.x, vec2.y)
 }
 
-operator fun Double.div(vec2: Vec2<Double>) : Vec2<Double> {
-  return Vec2(this / vec2.x, this / vec2.y)
+operator fun Double.div(vec2: Vec2<Double>) : Vec2Double {
+  return Vec2Double(this / vec2.x, this / vec2.y)
 }
