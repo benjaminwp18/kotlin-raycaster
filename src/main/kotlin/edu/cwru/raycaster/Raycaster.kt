@@ -13,11 +13,12 @@ import javafx.scene.layout.HBox
 import javafx.scene.layout.VBox
 import javafx.stage.Stage
 import java.nio.IntBuffer
+import kotlin.math.absoluteValue
 
 const val NS_IN_S = 1_000_000_000.0
 
 const val PX_PER_BLOCK = 50
-const val BLOCKS_PER_PX = 1 / PX_PER_BLOCK
+const val BLOCKS_PER_PX = 1.0 / PX_PER_BLOCK.toDouble()
 
 const val PLAYER_MOVE_RATE = 3.0  // blocks / sec
 const val PLAYER_RADIUS_BLOCKS = 0.25
@@ -72,12 +73,21 @@ const val FPV_HEIGHT_PX = 400
 
 fun Double.format(scale: Int) = "%.${scale}f".format(this)
 
+class Player() {
+    var position = MutableVec2Double(2.0, 2.0)
+    var direction = MutableVec2Double(-1.0, 0.0)
+    var camPlane = MutableVec2Double(0.0, 0.66)
+}
+
+enum class WallType {
+    NorthSouth, EastWest
+}
 
 class Raycaster : Application() {
     private val keyMap: MutableMap<KeyCode, Boolean> = KEY_VECTORS.keys.associateWith { false }
         .toMutableMap().withDefault { false }
     private var prevFrameTime = 0L
-    private var playerPosition = MutableVec2Double(2.0, 2.0)
+    private val player = Player()
 
     override fun start(primaryStage: Stage) {
         val frameRateLabel = Label("No FPS data")
@@ -122,7 +132,7 @@ class Raycaster : Application() {
                 // Don't walk through walls
                 for ((key, pressed) in keyMap) {
                     if (pressed) {
-                        val newPos = playerPosition + KEY_VECTORS.getValue(key) * deltaSec
+                        val newPos = player.position + KEY_VECTORS.getValue(key) * deltaSec
                         val topLeft = newPos - PLAYER_RADIUS_BLOCKS
                         val bottomRight = newPos + PLAYER_RADIUS_BLOCKS
 
@@ -131,13 +141,13 @@ class Raycaster : Application() {
                             MAP[topLeft.y.toInt()][bottomRight.x.toInt()].passable and
                             MAP[bottomRight.y.toInt()][topLeft.x.toInt()].passable and
                             MAP[bottomRight.y.toInt()][bottomRight.x.toInt()].passable) {
-                            playerPosition = MutableVec2Double(newPos)
+                            player.position = MutableVec2Double(newPos)
                         }
                     }
                 }
 
                 // Don't leave the map
-                playerPosition.clamp(
+                player.position.clamp(
                     PLAYER_RADIUS_BLOCKS, MAP_WIDTH_BLOCKS - PLAYER_RADIUS_BLOCKS,
                     PLAYER_RADIUS_BLOCKS, MAP_HEIGHT_BLOCKS - PLAYER_RADIUS_BLOCKS
                 )
@@ -153,8 +163,8 @@ class Raycaster : Application() {
                 }
 
                 topDownView.prepRect(
-                    (playerPosition.x * PX_PER_BLOCK).toInt() - PLAYER_RADIUS_PX,
-                    (playerPosition.y * PX_PER_BLOCK).toInt() - PLAYER_RADIUS_PX,
+                    (player.position.x * PX_PER_BLOCK).toInt() - PLAYER_RADIUS_PX,
+                    (player.position.y * PX_PER_BLOCK).toInt() - PLAYER_RADIUS_PX,
                     PLAYER_RADIUS_PX * 2, PLAYER_RADIUS_PX * 2,
                     Color.RED
                 )
@@ -166,6 +176,80 @@ class Raycaster : Application() {
                     FPV_WIDTH_PX, FPV_HEIGHT_PX,
                     Color.PURPLE
                 )
+
+                firstPersonView.redraw()
+
+                for (screenX in 0 until FPV_WIDTH_PX) {
+                    val cameraX = 2 * screenX.toDouble() / FPV_WIDTH_PX - 1
+                    val rayDir = (player.direction + player.camPlane) * cameraX
+
+                    val rayMapPos = MutableVec2Int(player.position.toVec2Int())
+                    val sideDist = MutableVec2Double(0.0, 0.0)
+                    val deltaDist = (1.0 / rayDir).absoluteValue
+                    val step = MutableVec2Int(0, 0)
+                    var hitWall = false
+                    var hitSide = WallType.EastWest
+
+                    if (rayDir.x < 0) {
+                        step.x = -1
+                        sideDist.x = (player.position.x - rayMapPos.x) * deltaDist.x
+                    }
+                    else {
+                        step.x = 1
+                        sideDist.x = (-player.position.x + rayMapPos.x + 1.0) * deltaDist.x
+                    }
+                    if (rayDir.y < 0) {
+                        step.y = -1
+                        sideDist.y = (player.position.y - rayMapPos.y) * deltaDist.y
+                    }
+                    else {
+                        step.y = 1
+                        sideDist.y = (-player.position.y + rayMapPos.y + 1.0) * deltaDist.y
+                    }
+
+                    while (!hitWall) {
+                        if (sideDist.x < sideDist.y) {
+                            sideDist.x += deltaDist.x
+                            rayMapPos.x += step.x
+                            hitSide = WallType.EastWest
+                        }
+                        else {
+                            sideDist.y += deltaDist.y
+                            rayMapPos.y += step.y
+                            hitSide = WallType.NorthSouth
+                        }
+
+                        if (!MAP[rayMapPos.y][rayMapPos.x].passable) {
+                            hitWall = true
+                        }
+                    }
+
+                    val dirIndicator = Vec2Int((player.direction.x * 20.0).toInt(), 5)
+                    topDownView.prepRect(player.position.x.toInt() * PX_PER_BLOCK, player.position.y.toInt() * PX_PER_BLOCK, 10, 10, Color.PURPLE)
+                    topDownView.prepRect((player.position.x * PX_PER_BLOCK).toInt() - 2, (player.position.y * PX_PER_BLOCK).toInt() - 2, dirIndicator.x, dirIndicator.y, Color.PURPLE)
+                    topDownView.prepRect(rayMapPos.x * PX_PER_BLOCK, rayMapPos.y * PX_PER_BLOCK, 10, 10, Color.GREEN)
+
+                    val perpWallDist =
+                        if (hitSide == WallType.EastWest) sideDist.x - deltaDist.x
+                        else sideDist.y - deltaDist.y
+//                    println(perpWallDist)
+                    val lineHeight = (FPV_HEIGHT_PX / perpWallDist).toInt()
+                    val drawStart = maxOf(FPV_HEIGHT_PX / 2 - lineHeight / 2, 0)
+                    val drawEnd = minOf(FPV_HEIGHT_PX / 2 + lineHeight / 2, FPV_HEIGHT_PX - 1)
+
+                    val color = MAP[rayMapPos.y][rayMapPos.x].color
+
+                    if (lineHeight + drawStart >= FPV_HEIGHT_PX) {
+                        println("$drawStart -> $lineHeight")
+                    }
+
+                    // TODO: Different brightness for NS vs. EW sides
+//                    if (hitSide == WallType.NorthSouth) {
+//                        color /= 2
+//                    }
+
+//                    firstPersonView.prepRect(screenX, drawStart, 1, lineHeight, color)
+                }
 
                 firstPersonView.redraw()
             }
@@ -209,11 +293,28 @@ class ImageCanvas private constructor(
     }
 
     fun prepRect(x: Int, y: Int, w: Int, h: Int, color: Color) {
-        for (r in y until y + h) {
-            for (c in x until x + w) {
+        val topLeft = MutableVec2Int(x, y)
+        val bottomRight = MutableVec2Int(x + w, y + h)
+
+        // Negative width/height -> invert
+        if (w < 0) {
+            topLeft.x = x + w
+            bottomRight.x = x
+        }
+        if (h < 0) {
+            topLeft.y = y + h
+            bottomRight.y = y
+        }
+
+        for (r in topLeft.y until bottomRight.y) {
+            for (c in topLeft.x until bottomRight.x) {
                 prepPixel(c, r, color)
             }
         }
+    }
+
+    fun prepLine(x1: Int, y1: Int, x2: Int, y2: Int) {
+
     }
 
     fun redraw() {
