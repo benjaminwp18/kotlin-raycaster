@@ -4,6 +4,7 @@ import javafx.animation.AnimationTimer
 import javafx.application.Application
 import javafx.scene.Scene
 import javafx.scene.canvas.Canvas
+import javafx.scene.canvas.GraphicsContext
 import javafx.scene.control.Label
 import javafx.scene.input.KeyCode
 import javafx.scene.layout.HBox
@@ -37,7 +38,9 @@ data class Block(val color: Color, val passable: Boolean) {
     companion object {
         private val CHAR_TO_BLOCK = mapOf(
             ' ' to Block(Color.WHITE, true),
-            '#' to Block(Color.BLUE, false)
+            'B' to Block(Color.BLUE, false),
+            'G' to Block(Color.GREEN, false),
+            'O' to Block(Color.ORANGE, false),
         ).withDefault { Block(Color.PURPLE, false) }
 
         fun fromChar(c: Char) = CHAR_TO_BLOCK.getValue(c)
@@ -54,15 +57,15 @@ fun stringToBlockMap(str: String): Array<Array<Block>> {
 }
 
 private val MAP = stringToBlockMap("""
-    ######
-    #    #
-    #  # #
-    #    #
-    ######
+    BBBBBB
+    G    B
+    B  B B
+    O    B
+    BBBBBB
 """.trimIndent())
 
-val SKY_COLOR = Color.LIGHTBLUE
-val FLOOR_COLOR = Color.LIGHTGRAY
+val SKY_COLOR: Color = Color.LIGHTBLUE
+val FLOOR_COLOR: Color = Color.LIGHTGRAY
 
 val MAP_WIDTH_BLOCKS = MAP[0].size
 val MAP_HEIGHT_BLOCKS = MAP.size
@@ -74,7 +77,7 @@ const val FPV_HEIGHT_PX = 400
 
 fun Double.format(scale: Int) = "%.${scale}f".format(this)
 
-class Player() {
+class Player {
     var position = MutableVec2Double(2.0, 2.0)
     var direction = MutableVec2Double(-1.0, 0.0)
     var camPlane = MutableVec2Double(0.0, 1.0)
@@ -215,35 +218,12 @@ class Raycaster : Application() {
                             hitSide = WallType.NorthSouth
                         }
 
+                        // Assumes only impassable tiles are walls
+                        // Will cause errors if map is not surrounded by walls
                         if (!MAP[rayMapPos.y][rayMapPos.x].passable) {
                             hitWall = true
                         }
                     }
-
-                    // Tag the block the player is in
-                    val playerBlock = player.position.toVec2Int()
-                    topDownCanvas.fillRect(playerBlock.x * PX_PER_BLOCK, playerBlock.y * PX_PER_BLOCK, 10, 10, Color.PURPLE)
-
-                    // Tag the blocks the rays hit
-                    topDownCanvas.fillRect(rayMapPos.x * PX_PER_BLOCK, rayMapPos.y * PX_PER_BLOCK, 10, 10, Color.GREEN)
-
-                    // Draw lines for rays
-                    val playerPosPx = (player.position * PX_PER_BLOCK.toDouble()).toVec2Int()
-                    val rayDirPx = playerPosPx + (rayDir * 40.0).toVec2Int()
-                    topDownCanvas.strokeLine(
-                        playerPosPx.x, playerPosPx.y,
-                        rayDirPx.x, rayDirPx.y,
-                        Color.rgb(255, 0, (255.0 * (screenX / FPV_WIDTH_PX.toDouble())).toInt())
-                    )
-
-                    // Draw line in the player's direction
-                    val playerDirPx = playerPosPx + (player.direction * 20.0).toVec2Int()
-                    topDownCanvas.strokeLine(playerPosPx.x, playerPosPx.y, playerDirPx.x, playerDirPx.y, Color.BLACK)
-
-                    // Draw camera plane
-                    val playerPlaneEndPx = playerDirPx + (player.camPlane * 20.0).toVec2Int()
-                    val playerPlaneStartPx = playerDirPx - (player.camPlane * 20.0).toVec2Int()
-                    topDownCanvas.strokeLine(playerPlaneStartPx.x, playerPlaneStartPx.y, playerPlaneEndPx.x, playerPlaneEndPx.y, Color.BLACK)
 
                     val perpWallDist =
                         if (hitSide == WallType.EastWest) sideDist.x - deltaDist.x
@@ -258,6 +238,31 @@ class Raycaster : Application() {
                     }
 
                     firstPersonCanvas.fillRect(screenX, drawStart, 1, lineHeight, color)
+
+                    // Tag the block the player is in
+                    val playerBlock = player.position.toVec2Int()
+                    topDownCanvas.fillRect(playerBlock.x * PX_PER_BLOCK, playerBlock.y * PX_PER_BLOCK, 10, 10, Color.PURPLE)
+
+                    // Tag the blocks the rays hit
+                    topDownCanvas.fillRect(rayMapPos.x * PX_PER_BLOCK, rayMapPos.y * PX_PER_BLOCK, 10, 10, Color.GREEN)
+
+                    // Draw lines for rays
+                    val playerPosPx = (player.position * PX_PER_BLOCK.toDouble()).toVec2Int()
+                    val rayDirPx = playerPosPx + (rayDir * perpWallDist * PX_PER_BLOCK.toDouble()).toVec2Int()
+                    topDownCanvas.strokeLine(
+                        playerPosPx.x, playerPosPx.y,
+                        rayDirPx.x, rayDirPx.y,
+                        Color.rgb(255, 0, (255.0 * (screenX / FPV_WIDTH_PX.toDouble())).toInt())
+                    )
+
+                    // Draw line in the player's direction
+                    val playerDirPx = playerPosPx + (player.direction * 20.0).toVec2Int()
+                    topDownCanvas.strokeLine(playerPosPx.x, playerPosPx.y, playerDirPx.x, playerDirPx.y, Color.BLACK)
+
+                    // Draw camera plane
+                    val playerPlaneEndPx = playerDirPx + (player.camPlane * 20.0).toVec2Int()
+                    val playerPlaneStartPx = playerDirPx - (player.camPlane * 20.0).toVec2Int()
+                    topDownCanvas.strokeLine(playerPlaneStartPx.x, playerPlaneStartPx.y, playerPlaneEndPx.x, playerPlaneEndPx.y, Color.BLACK)
                 }
             }
         }.start()
@@ -265,13 +270,17 @@ class Raycaster : Application() {
 }
 
 class ContextualCanvas(private val width: Int, private val height: Int): Canvas(width.toDouble(), height.toDouble()) {
-    val context = getGraphicsContext2D()
+    val context: GraphicsContext = graphicsContext2D
     var fill: Paint
-        get() = context.getFill()
-        set(color: Paint) = context.setFill(color)
+        get() = context.fill
+        set(color) {
+            context.fill = color
+        }
     var stroke: Paint
-        get() = context.getStroke()
-        set(color: Paint) = context.setStroke(color)
+        get() = context.stroke
+        set(color) {
+            context.stroke = color
+        }
 
 
     fun fillRect(x: Double, y: Double, w: Double, h: Double, color: Color? = null) {
