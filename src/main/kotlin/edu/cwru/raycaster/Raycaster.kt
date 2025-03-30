@@ -13,7 +13,6 @@ import javafx.scene.layout.VBox
 import javafx.scene.paint.Color
 import javafx.scene.paint.Paint
 import javafx.stage.Stage
-import java.io.FileInputStream
 
 
 const val NS_IN_S = 1_000_000_000.0
@@ -36,27 +35,9 @@ val KEY_VECTORS = mapOf(
     KeyCode.RIGHT to Vec2Double( PLAYER_MOVE_RATE, 0.0),
 ).withDefault { Vec2Double(0.0, 0.0) }
 
-const val TEXTURE_PATH = "src/main/resources/edu/cwru/raycaster/textures/"
-
-
-enum class Texture(fileName: String){
-    EAGLE("eagle.png"),
-    RED_BRICK("red_brick.png"),
-    PURPLE_STONE("purple_stone.png"),
-    GREY_STONE("grey_stone.png"),
-    BLUE_BRICK("blue_brick.png"),
-    MOSSY("mossy.png"),
-    WOOD("wood.png"),
-    COLOR_STONE("color_stone.png");
-
-    private val inputStream = FileInputStream(TEXTURE_PATH + fileName)
-    val image = Image(inputStream)
-}
-
 data class Block(val color: Color,
                  val texture: Texture,
                  val passable: Boolean = false) {
-
     companion object {
         private val CHAR_TO_BLOCK = mapOf(
             ' ' to Block(Color.WHITE, Texture.MOSSY, true),
@@ -182,9 +163,9 @@ class Raycaster : Application() {
 
                 for ((y, row) in MAP.withIndex()) {
                     for ((x, block) in row.withIndex()) {
-                        val xLocation = (x * PX_PER_BLOCK).toDouble()
-                        val yLocation = (y * PX_PER_BLOCK).toDouble()
-                        if (USE_TEXTURES){
+                        val xLocation = x * PX_PER_BLOCK
+                        val yLocation = y * PX_PER_BLOCK
+                        if (USE_TEXTURES) {
                             topDownCanvas.drawImage(block.texture.image, xLocation, yLocation)
                         }
                         else {
@@ -316,8 +297,8 @@ class ContextualCanvas(private val width: Int, private val height: Int): Canvas(
             context.stroke = color
         }
 
-    fun drawImage(image: Image, x: Double, y: Double) {
-        context.drawImage(image, x, y)
+    fun drawImage(image: Image, x: Number, y: Number) {
+        context.drawImage(image, x.toDouble(), y.toDouble())
     }
 
     fun fillRect(x: Double, y: Double, w: Double, h: Double, color: Color? = null) {
