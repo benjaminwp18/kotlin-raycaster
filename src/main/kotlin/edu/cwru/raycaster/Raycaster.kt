@@ -3,15 +3,11 @@ package edu.cwru.raycaster
 import javafx.animation.AnimationTimer
 import javafx.application.Application
 import javafx.scene.Scene
-import javafx.scene.canvas.Canvas
-import javafx.scene.canvas.GraphicsContext
 import javafx.scene.control.Label
-import javafx.scene.image.Image
 import javafx.scene.input.KeyCode
 import javafx.scene.layout.HBox
 import javafx.scene.layout.VBox
 import javafx.scene.paint.Color
-import javafx.scene.paint.Paint
 import javafx.stage.Stage
 
 
@@ -282,50 +278,6 @@ class Raycaster : Application() {
             }
         }.start()
     }
-}
-
-class ContextualCanvas(private val width: Int, private val height: Int): Canvas(width.toDouble(), height.toDouble()) {
-    val context: GraphicsContext = graphicsContext2D
-    var fill: Paint
-        get() = context.fill
-        set(color) {
-            context.fill = color
-        }
-    var stroke: Paint
-        get() = context.stroke
-        set(color) {
-            context.stroke = color
-        }
-
-    fun drawImage(image: Image, x: Number, y: Number) {
-        context.drawImage(image, x.toDouble(), y.toDouble())
-    }
-
-    fun fillRect(x: Double, y: Double, w: Double, h: Double, color: Color? = null) {
-        val oldFill = fill
-        if (color != null) {
-            fill = color
-        }
-        context.fillRect(x, y, w, h)
-        fill = oldFill
-    }
-    fun fillRect(x: Number, y: Number, w: Number, h: Number, color: Color? = null) =
-        fillRect(x.toDouble(), y.toDouble(), w.toDouble(), h.toDouble(), color)
-
-    fun strokeLine(x1: Double, y1: Double, x2: Double, y2: Double, color: Color? = null) {
-        val oldStroke = stroke
-        if (color != null) {
-            stroke = color
-        }
-        context.strokeLine(x1, y1, x2, y2)
-        stroke = oldStroke
-    }
-    fun strokeLine(x1: Number, y1: Number, x2: Number, y2: Number, color: Color? = null) =
-        strokeLine(x1.toDouble(), y1.toDouble(), x2.toDouble(), y2.toDouble(), color)
-    fun strokeLine(p1: Vec2Double, p2: Vec2Double, color: Color? = null) =
-        strokeLine(p1.x, p1.y, p2.x, p2.y, color)
-    fun strokeLine(p1: Vec2Int, p2: Vec2Int, color: Color? = null) =
-        strokeLine(p1.x, p1.y, p2.x, p2.y, color)
 }
 
 fun main() {
