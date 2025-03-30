@@ -6,17 +6,18 @@ import javafx.scene.Scene
 import javafx.scene.canvas.Canvas
 import javafx.scene.canvas.GraphicsContext
 import javafx.scene.control.Label
+import javafx.scene.image.Image
 import javafx.scene.input.KeyCode
 import javafx.scene.layout.HBox
 import javafx.scene.layout.VBox
-import javafx.stage.Stage
 import javafx.scene.paint.Color
 import javafx.scene.paint.Paint
+import javafx.stage.Stage
 
 
 const val NS_IN_S = 1_000_000_000.0
 
-const val PX_PER_BLOCK = 50
+const val PX_PER_BLOCK = 64
 const val BLOCKS_PER_PX = 1.0 / PX_PER_BLOCK.toDouble()
 
 const val PLAYER_MOVE_RATE = 3.0  // blocks / sec
@@ -34,14 +35,16 @@ val KEY_VECTORS = mapOf(
     KeyCode.RIGHT to Vec2Double( PLAYER_MOVE_RATE, 0.0),
 ).withDefault { Vec2Double(0.0, 0.0) }
 
-data class Block(val color: Color, val passable: Boolean) {
+data class Block(val color: Color,
+                 val texture: Texture,
+                 val passable: Boolean = false) {
     companion object {
         private val CHAR_TO_BLOCK = mapOf(
-            ' ' to Block(Color.WHITE, true),
-            'B' to Block(Color.BLUE, false),
-            'G' to Block(Color.GREEN, false),
-            'O' to Block(Color.ORANGE, false),
-        ).withDefault { Block(Color.PURPLE, false) }
+            ' ' to Block(Color.WHITE, Texture.MOSSY, true),
+            'B' to Block(Color.BLUE, Texture.BLUE_BRICK),
+            'G' to Block(Color.GREEN, Texture.WOOD),
+            'O' to Block(Color.ORANGE, Texture.EAGLE),
+        ).withDefault { Block(Color.PURPLE, Texture.PURPLE_STONE) }
 
         fun fromChar(c: Char) = CHAR_TO_BLOCK.getValue(c)
     }
@@ -86,6 +89,8 @@ class Player {
 enum class WallType {
     NorthSouth, EastWest
 }
+
+const val USE_TEXTURES = true
 
 class Raycaster : Application() {
     private val keyMap: MutableMap<KeyCode, Boolean> = KEY_VECTORS.keys.associateWith { false }
@@ -158,14 +163,22 @@ class Raycaster : Application() {
 
                 for ((y, row) in MAP.withIndex()) {
                     for ((x, block) in row.withIndex()) {
-                        topDownCanvas.fillRect(
-                            x * PX_PER_BLOCK, y * PX_PER_BLOCK,
-                            PX_PER_BLOCK, PX_PER_BLOCK,
-                            block.color
-                        )
+                        val xLocation = x * PX_PER_BLOCK
+                        val yLocation = y * PX_PER_BLOCK
+                        if (USE_TEXTURES) {
+                            topDownCanvas.drawImage(block.texture.image, xLocation, yLocation)
+                        }
+                        else {
+                            topDownCanvas.fillRect(
+                                xLocation, yLocation,
+                                PX_PER_BLOCK, PX_PER_BLOCK,
+                                block.color
+                            )
+                        }
                     }
                 }
 
+                // Draws Player
                 topDownCanvas.fillRect(
                     (player.position.x * PX_PER_BLOCK).toInt() - PLAYER_RADIUS_PX,
                     (player.position.y * PX_PER_BLOCK).toInt() - PLAYER_RADIUS_PX,
@@ -173,6 +186,8 @@ class Raycaster : Application() {
                     Color.RED
                 )
 
+                // Draws Sky and Floor
+                // TODO: Not sure how to make this work with textures
                 firstPersonCanvas.fillRect(0, 0, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, SKY_COLOR)
                 firstPersonCanvas.fillRect(0, FPV_HEIGHT_PX / 2, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, FLOOR_COLOR)
 
@@ -282,6 +297,9 @@ class ContextualCanvas(private val width: Int, private val height: Int): Canvas(
             context.stroke = color
         }
 
+    fun drawImage(image: Image, x: Number, y: Number) {
+        context.drawImage(image, x.toDouble(), y.toDouble())
+    }
 
     fun fillRect(x: Double, y: Double, w: Double, h: Double, color: Color? = null) {
         val oldFill = fill
