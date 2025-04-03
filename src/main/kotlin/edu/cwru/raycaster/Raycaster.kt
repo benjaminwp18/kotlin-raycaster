@@ -22,6 +22,7 @@ const val PX_PER_BLOCK = TEXTURE_WIDTH
 const val BLOCKS_PER_PX = 1.0 / PX_PER_BLOCK.toDouble()
 
 const val PLAYER_MOVE_RATE = 3.0  // blocks / sec
+const val PLAYER_ANGULAR_VELOCITY = PI   // radians / sec
 const val PLAYER_RADIUS_BLOCKS = 0.25
 const val PLAYER_RADIUS_PX = (PLAYER_RADIUS_BLOCKS * PX_PER_BLOCK).toInt()
 
@@ -97,7 +98,6 @@ enum class WallType {
 }
 
 const val USE_TEXTURES = true
-const val ANGULAR_VELOCITY = PI / 2.0
 
 class Raycaster : Application() {
     private val keyMap: MutableMap<KeyCode, Boolean> = (STRAFE_KEY_ANGLES.keys + ROTATION_KEY_SIGNS.keys).associateWith { false }
@@ -150,7 +150,7 @@ class Raycaster : Application() {
                 for ((key, pressed) in keyMap) {
                     if (pressed) {
                         if (key in ROTATION_KEY_SIGNS) {
-                            val newCamPlane = player.camPlane.rotate(ROTATION_KEY_SIGNS.getValue(key) * ANGULAR_VELOCITY * deltaSec)
+                            val newCamPlane = player.camPlane.rotate(ROTATION_KEY_SIGNS.getValue(key) * PLAYER_ANGULAR_VELOCITY * deltaSec)
                             player.camPlane = MutableVec2Double(newCamPlane)
                             player.direction = MutableVec2Double(newCamPlane.rotate(PI / 2))
                         }
