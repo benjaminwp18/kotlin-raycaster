@@ -9,6 +9,7 @@ import javafx.scene.layout.HBox
 import javafx.scene.layout.VBox
 import javafx.scene.paint.Color
 import javafx.stage.Stage
+import kotlin.math.PI
 
 
 const val NS_IN_S = 1_000_000_000.0
@@ -20,16 +21,21 @@ const val PLAYER_MOVE_RATE = 3.0  // blocks / sec
 const val PLAYER_RADIUS_BLOCKS = 0.25
 const val PLAYER_RADIUS_PX = (PLAYER_RADIUS_BLOCKS * PX_PER_BLOCK).toInt()
 
-val KEY_VECTORS = mapOf(
-    KeyCode.W     to Vec2Double(0.0, -PLAYER_MOVE_RATE),
-    KeyCode.UP    to Vec2Double(0.0, -PLAYER_MOVE_RATE),
-    KeyCode.S     to Vec2Double(0.0,  PLAYER_MOVE_RATE),
-    KeyCode.DOWN  to Vec2Double(0.0,  PLAYER_MOVE_RATE),
-    KeyCode.A     to Vec2Double(-PLAYER_MOVE_RATE, 0.0),
-    KeyCode.LEFT  to Vec2Double(-PLAYER_MOVE_RATE, 0.0),
-    KeyCode.D     to Vec2Double( PLAYER_MOVE_RATE, 0.0),
-    KeyCode.RIGHT to Vec2Double( PLAYER_MOVE_RATE, 0.0),
-).withDefault { Vec2Double(0.0, 0.0) }
+val STRAFE_KEY_ANGLES = mapOf(
+    KeyCode.W     to 0.0,
+    KeyCode.UP    to 0.0,
+    KeyCode.S     to PI,
+    KeyCode.DOWN  to PI,
+    KeyCode.A     to -0.5 * PI,
+    KeyCode.LEFT  to -0.5 * PI,
+    KeyCode.D     to 0.5 * PI,
+    KeyCode.RIGHT to 0.5 * PI,
+)
+
+val ROTATION_KEY_SIGNS = mapOf(
+    KeyCode.E to 1.0,
+    KeyCode.Q to -1.0,
+)
 
 data class Block(val color: Color,
                  val texture: Texture,
@@ -87,10 +93,12 @@ enum class WallType {
 }
 
 const val USE_TEXTURES = true
+const val ANGULAR_VELOCITY = PI / 2.0
 
 class Raycaster : Application() {
-    private val keyMap: MutableMap<KeyCode, Boolean> = KEY_VECTORS.keys.associateWith { false }
-        .toMutableMap().withDefault { false }
+    private val keyMap: MutableMap<KeyCode, Boolean> = (STRAFE_KEY_ANGLES.keys + ROTATION_KEY_SIGNS.keys).associateWith { false }
+        .toMutableMap()
+
     private var prevFrameTime = 0L
     private val player = Player()
 
@@ -137,16 +145,28 @@ class Raycaster : Application() {
                 // Don't walk through walls
                 for ((key, pressed) in keyMap) {
                     if (pressed) {
-                        val newPos = player.position + KEY_VECTORS.getValue(key) * deltaSec
-                        val topLeft = newPos - PLAYER_RADIUS_BLOCKS
-                        val bottomRight = newPos + PLAYER_RADIUS_BLOCKS
+                        if (key in ROTATION_KEY_SIGNS) {
+                            val newCamPlane = player.camPlane.rotate(ROTATION_KEY_SIGNS.getValue(key) * ANGULAR_VELOCITY * deltaSec)
+                            player.camPlane = MutableVec2Double(newCamPlane)
+                            player.direction = MutableVec2Double(newCamPlane.rotate(PI / 2))
+                        }
+                        else {
+                            val direction = player.direction.rotate(STRAFE_KEY_ANGLES.getValue(key))
 
-                        // TODO: Snap to wall if you would clip it to avoid gaps
-                        if (MAP[topLeft.y.toInt()][topLeft.x.toInt()].passable and
-                            MAP[topLeft.y.toInt()][bottomRight.x.toInt()].passable and
-                            MAP[bottomRight.y.toInt()][topLeft.x.toInt()].passable and
-                            MAP[bottomRight.y.toInt()][bottomRight.x.toInt()].passable) {
-                            player.position = MutableVec2Double(newPos)
+                            val newPos = player.position + direction * deltaSec * PLAYER_MOVE_RATE
+                            val topLeft = newPos - PLAYER_RADIUS_BLOCKS
+                            val bottomRight = newPos + PLAYER_RADIUS_BLOCKS
+
+                            // TODO: Snap to wall if you would clip it to avoid gaps
+                            if (MAP[topLeft.y.toInt()][topLeft.x.toInt()].passable and
+                                MAP[topLeft.y.toInt()][bottomRight.x.toInt()].passable and
+                                MAP[bottomRight.y.toInt()][topLeft.x.toInt()].passable and
+                                MAP[bottomRight.y.toInt()][bottomRight.x.toInt()].passable
+                            ) {
+
+                                player.position = MutableVec2Double(newPos)
+                            }
+
                         }
                     }
                 }

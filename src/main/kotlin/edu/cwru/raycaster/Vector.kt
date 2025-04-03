@@ -102,7 +102,7 @@ interface VectorOperationsDouble : VectorOperations<Double> {
   override fun dot(vec: Vec2<Double>) = x * vec.x + y * vec.y
   override fun angleBetween(vec: Vec2<Double>) = acos(dot(vec) / (magnitude * vec.magnitude))
 
-  fun rotate(angle: Double): Vec2<Double> {
+  fun rotate(angle: Double): Vec2Double {
     //    In Radians
     val cosAngle = cos(angle)
     val sinAngle = sin(angle)
