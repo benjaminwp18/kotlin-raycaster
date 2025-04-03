@@ -293,7 +293,6 @@ class Raycaster : Application() {
                             if (hitSide == WallType.NorthSouth) {
                                 color = color.darker()
                             }
-//                            println("($screenX, $y) : (1, 1) -> $color")
                             firstPersonCanvas.writePixel(screenX, y, color)
                         }
                     }
