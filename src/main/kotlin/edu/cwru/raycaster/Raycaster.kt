@@ -30,7 +30,12 @@ val KEY_ANGLES = mapOf(
     KeyCode.LEFT  to -0.5 * PI,
     KeyCode.D     to 0.5 * PI,
     KeyCode.RIGHT to 0.5 * PI,
-).withDefault { 0.0 }
+)
+
+val ROTATION_KEY_SIGNS = mapOf(
+    KeyCode.E to 1.0,
+    KeyCode.Q to -1.0,
+)
 
 data class Block(val color: Color,
                  val texture: Texture,
