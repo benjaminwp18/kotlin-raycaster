@@ -145,7 +145,7 @@ class Raycaster : Application() {
                 // Don't walk through walls
                 for ((key, pressed) in keyMap) {
                     if (pressed) {
-                        if (key in ROTATION_KEY_SIGNS){
+                        if (key in ROTATION_KEY_SIGNS) {
                             val newCamPlane = player.camPlane.rotate(ROTATION_KEY_SIGNS.getValue(key) * ANGULAR_VELOCITY * deltaSec)
                             player.camPlane = MutableVec2Double(newCamPlane)
                             player.direction = MutableVec2Double(newCamPlane.rotate(PI / 2))
