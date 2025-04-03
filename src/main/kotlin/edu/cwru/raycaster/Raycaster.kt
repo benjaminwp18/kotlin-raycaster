@@ -89,10 +89,6 @@ enum class WallType {
 
 const val USE_TEXTURES = true
 
-val ROTATION_KEYS = mapOf(
-    KeyCode.E to 1.0,
-    KeyCode.Q to -1.0,
-)
 
 const val ANGULAR_VELOCITY = PI / 2.0
 
