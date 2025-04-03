@@ -21,7 +21,7 @@ const val PLAYER_MOVE_RATE = 3.0  // blocks / sec
 const val PLAYER_RADIUS_BLOCKS = 0.25
 const val PLAYER_RADIUS_PX = (PLAYER_RADIUS_BLOCKS * PX_PER_BLOCK).toInt()
 
-val KEY_ANGLES = mapOf(
+val STRAFE_KEY_ANGLES = mapOf(
     KeyCode.W     to 0.0,
     KeyCode.UP    to 0.0,
     KeyCode.S     to PI,
@@ -30,7 +30,12 @@ val KEY_ANGLES = mapOf(
     KeyCode.LEFT  to -0.5 * PI,
     KeyCode.D     to 0.5 * PI,
     KeyCode.RIGHT to 0.5 * PI,
-).withDefault { 0.0 }
+)
+
+val ROTATION_KEY_SIGNS = mapOf(
+    KeyCode.E to 1.0,
+    KeyCode.Q to -1.0,
+)
 
 data class Block(val color: Color,
                  val texture: Texture,
@@ -89,10 +94,6 @@ enum class WallType {
 
 const val USE_TEXTURES = true
 
-val ROTATION_KEYS = mapOf(
-    KeyCode.E to 1.0,
-    KeyCode.Q to -1.0,
-)
 
 const val ANGULAR_VELOCITY = PI / 2.0
 
@@ -149,7 +150,7 @@ class Raycaster : Application() {
                         if (key in ROTATION_KEYS){
                             val newCamPlane = player.camPlane.rotate(ROTATION_KEYS.getValue(key) * ANGULAR_VELOCITY * deltaSec)
                             player.camPlane = MutableVec2Double(newCamPlane)
-                            player.direction = MutableVec2Double(newCamPlane.rotate(PI/2))
+                            player.direction = MutableVec2Double(newCamPlane.rotate(PI / 2))
                         }
                         else {
                             val direction = player.direction.rotate(KEY_ANGLES.getValue(key))
