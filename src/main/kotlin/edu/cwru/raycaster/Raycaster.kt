@@ -150,7 +150,7 @@ class Raycaster : Application() {
                         if (key in ROTATION_KEYS){
                             val newCamPlane = player.camPlane.rotate(ROTATION_KEYS.getValue(key) * ANGULAR_VELOCITY * deltaSec)
                             player.camPlane = MutableVec2Double(newCamPlane)
-                            player.direction = MutableVec2Double(newCamPlane.rotate(PI/2))
+                            player.direction = MutableVec2Double(newCamPlane.rotate(PI / 2))
                         }
                         else {
                             val direction = player.direction.rotate(KEY_ANGLES.getValue(key))
