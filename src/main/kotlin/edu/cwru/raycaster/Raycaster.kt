@@ -21,7 +21,7 @@ const val PLAYER_MOVE_RATE = 3.0  // blocks / sec
 const val PLAYER_RADIUS_BLOCKS = 0.25
 const val PLAYER_RADIUS_PX = (PLAYER_RADIUS_BLOCKS * PX_PER_BLOCK).toInt()
 
-val KEY_ANGLES = mapOf(
+val STRAFE_KEY_ANGLES = mapOf(
     KeyCode.W     to 0.0,
     KeyCode.UP    to 0.0,
     KeyCode.S     to PI,
