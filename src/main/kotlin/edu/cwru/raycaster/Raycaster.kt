@@ -90,15 +90,15 @@ enum class WallType {
 const val USE_TEXTURES = true
 
 val ROTATION_KEYS = mapOf(
-    KeyCode.Q to false,
-    KeyCode.E to false,
+    KeyCode.E to 1.0,
+    KeyCode.Q to -1.0,
 )
 
 const val ANGULAR_VELOCITY = PI / 2.0
 
 class Raycaster : Application() {
     private val keyMap: MutableMap<KeyCode, Boolean> = KEY_ANGLES.keys.associateWith { false }
-        .toMutableMap().withDefault { false }.apply { this.putAll(ROTATION_KEYS) }
+        .toMutableMap().withDefault { false }.apply { this.putAll(ROTATION_KEYS.keys.associateWith { false }) }
 
     private var prevFrameTime = 0L
     private val player = Player()
@@ -146,14 +146,9 @@ class Raycaster : Application() {
                 // Don't walk through walls
                 for ((key, pressed) in keyMap) {
                     if (pressed) {
-                        if (key == KeyCode.Q ){
-                            val newCamPlane = player.camPlane.rotate(-ANGULAR_VELOCITY * deltaSec)
-                            player.camPlane = MutableVec2Double(newCamPlane )
-                            player.direction = MutableVec2Double(newCamPlane.rotate(PI/2))
-                        }
-                        else if (key == KeyCode.E){
-                            val newCamPlane = player.camPlane.rotate(ANGULAR_VELOCITY * deltaSec)
-                            player.camPlane = MutableVec2Double(newCamPlane )
+                        if (key in ROTATION_KEYS){
+                            val newCamPlane = player.camPlane.rotate(ROTATION_KEYS.getValue(key) * ANGULAR_VELOCITY * deltaSec)
+                            player.camPlane = MutableVec2Double(newCamPlane)
                             player.direction = MutableVec2Double(newCamPlane.rotate(PI/2))
                         }
                         else {
