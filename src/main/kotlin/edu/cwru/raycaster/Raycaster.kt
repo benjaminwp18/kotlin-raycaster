@@ -10,11 +10,15 @@ import javafx.scene.layout.VBox
 import javafx.scene.paint.Color
 import javafx.stage.Stage
 import kotlin.math.PI
+import kotlin.math.floor
 
 
 const val NS_IN_S = 1_000_000_000.0
 
-const val PX_PER_BLOCK = 64
+const val TEXTURE_WIDTH = 64
+const val TEXTURE_HEIGHT = 64
+
+const val PX_PER_BLOCK = TEXTURE_WIDTH
 const val BLOCKS_PER_PX = 1.0 / PX_PER_BLOCK.toDouble()
 
 const val PLAYER_MOVE_RATE = 3.0  // blocks / sec
@@ -259,16 +263,49 @@ class Raycaster : Application() {
                     val perpWallDist =
                         if (hitSide == WallType.EastWest) sideDist.x - deltaDist.x
                         else sideDist.y - deltaDist.y
+
                     val lineHeight = (FPV_HEIGHT_PX / perpWallDist).toInt()
                     val drawStart = maxOf(FPV_HEIGHT_PX / 2 - lineHeight / 2, 0)
+                    val drawEnd = minOf(FPV_HEIGHT_PX / 2 + lineHeight / 2, FPV_HEIGHT_PX - 1)
 
-                    var color = MAP[rayMapPos.y][rayMapPos.x].color
+                    if (USE_TEXTURES) {
+                        val textureReader = MAP[rayMapPos.y][rayMapPos.x].texture.image.pixelReader
 
-                    if (hitSide == WallType.NorthSouth) {
-                        color = color.darker()
+                        var wallX =
+                            if (hitSide == WallType.EastWest) player.position.y + perpWallDist * rayDir.y
+                            else player.position.x + perpWallDist * rayDir.x
+                        wallX -= floor(wallX)
+
+                        var texX = (wallX * TEXTURE_WIDTH.toDouble()).toInt()
+                        if ((hitSide == WallType.EastWest && rayDir.x > 0) ||
+                            (hitSide == WallType.NorthSouth && rayDir.y < 0)
+                        ) {
+                            texX = TEXTURE_WIDTH - texX - 1
+                        }
+
+                        val step = 1.0 * TEXTURE_HEIGHT /  lineHeight
+                        var texPos = (drawStart - FPV_HEIGHT_PX / 2 + lineHeight / 2) * step
+
+                        for (y in drawStart until drawEnd) {
+                            val texY = minOf(texPos.toInt(), TEXTURE_HEIGHT - 1)
+                            texPos += step
+                            var color = textureReader.getColor(texX, texY)
+                            if (hitSide == WallType.NorthSouth) {
+                                color = color.darker()
+                            }
+//                            println("($screenX, $y) : (1, 1) -> $color")
+                            firstPersonCanvas.writePixel(screenX, y, color)
+                        }
                     }
+                    else {
+                        var color = MAP[rayMapPos.y][rayMapPos.x].color
 
-                    firstPersonCanvas.fillRect(screenX, drawStart, 1, lineHeight, color)
+                        if (hitSide == WallType.NorthSouth) {
+                            color = color.darker()
+                        }
+
+                        firstPersonCanvas.fillRect(screenX, drawStart, 1, lineHeight, color)
+                    }
 
                     // Tag the block the player is in
                     val playerBlock = player.position.toVec2Int()
