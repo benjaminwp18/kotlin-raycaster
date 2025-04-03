@@ -26,8 +26,8 @@ val KEY_ANGLES = mapOf(
     KeyCode.UP    to 0.0,
     KeyCode.S     to PI,
     KeyCode.DOWN  to PI,
-    KeyCode.A     to 1.5 * PI,
-    KeyCode.LEFT  to 1.5 * PI,
+    KeyCode.A     to -0.5 * PI,
+    KeyCode.LEFT  to -0.5 * PI,
     KeyCode.D     to 0.5 * PI,
     KeyCode.RIGHT to 0.5 * PI,
 ).withDefault { 0.0 }
@@ -98,11 +98,7 @@ const val ANGULAR_VELOCITY = PI / 2.0
 
 class Raycaster : Application() {
     private val keyMap: MutableMap<KeyCode, Boolean> = KEY_ANGLES.keys.associateWith { false }
-        .toMutableMap().withDefault { false }
-
-    init {
-        keyMap.putAll(ROTATION_KEYS)
-    }
+        .toMutableMap().withDefault { false }.apply { this.putAll(ROTATION_KEYS) }
 
     private var prevFrameTime = 0L
     private val player = Player()
