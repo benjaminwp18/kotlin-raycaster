@@ -11,6 +11,7 @@ import javafx.scene.paint.Color
 import javafx.stage.Stage
 import kotlin.math.PI
 import kotlin.math.floor
+import kotlin.math.tanh
 
 
 const val NS_IN_S = 1_000_000_000.0
@@ -23,8 +24,13 @@ const val BLOCKS_PER_PX = 1.0 / PX_PER_BLOCK.toDouble()
 
 const val PLAYER_MOVE_RATE = 3.0  // blocks / sec
 const val PLAYER_ANGULAR_VELOCITY = PI   // radians / sec
-const val PLAYER_RADIUS_BLOCKS = 0.25
+const val PLAYER_RADIUS_BLOCKS = 0.1
 const val PLAYER_RADIUS_PX = (PLAYER_RADIUS_BLOCKS * PX_PER_BLOCK).toInt()
+
+const val FLASHLIGHT_PENETRATION_BLOCKS = 2.0  // After this nothing is visible
+const val FLASHLIGHT_CIRCLE_STEEPNESS = 10.0
+const val FLASHLIGHT_RADIUS = 0.5
+val FLASHLIGHT_COLOR: Color = Color.color(1.0, 1.0, 0.75)
 
 val STRAFE_KEY_ANGLES = mapOf(
     KeyCode.W     to 0.0,
@@ -84,6 +90,7 @@ val MAP_HEIGHT_PX = MAP_HEIGHT_BLOCKS * PX_PER_BLOCK
 
 const val FPV_WIDTH_PX = 800
 const val FPV_HEIGHT_PX = 400
+val FPV_VIEW_CENTER = Vec2Int(FPV_WIDTH_PX / 2, FPV_HEIGHT_PX / 2)
 
 fun Double.format(scale: Int) = "%.${scale}f".format(this)
 
@@ -286,14 +293,31 @@ class Raycaster : Application() {
                         val step = 1.0 * TEXTURE_HEIGHT /  lineHeight
                         var texPos = (drawStart - FPV_HEIGHT_PX / 2 + lineHeight / 2) * step
 
-                        for (y in drawStart until drawEnd) {
+                        for (screenY in drawStart until drawEnd) {
                             val texY = minOf(texPos.toInt(), TEXTURE_HEIGHT - 1)
                             texPos += step
                             var color = textureReader.getColor(texX, texY)
-                            if (hitSide == WallType.NorthSouth) {
-                                color = color.darker()
-                            }
-                            firstPersonCanvas.writePixel(screenX, y, color)
+
+                            // Vignette
+                            val screenPos = Vec2Int(screenX, screenY) - FPV_VIEW_CENTER
+                            val distFromCenter = screenPos.magnitude
+                            val normDistFromCenter = distFromCenter / FPV_VIEW_CENTER.magnitude
+                            val tanhActivation = -0.5 * tanh(FLASHLIGHT_CIRCLE_STEEPNESS * (normDistFromCenter - FLASHLIGHT_RADIUS)) + 0.5
+
+                            // Penetration
+                            val inverseNormRayDist = maxOf(1.0 - perpWallDist / FLASHLIGHT_PENETRATION_BLOCKS, 0.0)
+
+                            color = Color.color(
+                                FLASHLIGHT_COLOR.red * color.red,
+                                FLASHLIGHT_COLOR.green * color.green,
+                                FLASHLIGHT_COLOR.blue * color.blue
+                            )
+                            color = color.deriveColor(0.0, 1.0, inverseNormRayDist * tanhActivation, 1.0)
+
+//                            if (hitSide == WallType.NorthSouth) {
+//                                color = color.darker()
+//                            }
+                            firstPersonCanvas.writePixel(screenX, screenY, color)
                         }
                     }
                     else {
