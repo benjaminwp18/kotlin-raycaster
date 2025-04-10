@@ -44,6 +44,22 @@ val ROTATION_KEY_SIGNS = mapOf(
     KeyCode.Q to -1.0,
 )
 
+fun ByteArray.writePixel(x: Int, y: Int, color: Color) {
+    val pxIndex = (y * FPV_WIDTH_PX + x) * FPV_BYTES_PER_PX
+    this[pxIndex] = (color.blue * 255.0).toInt().toByte()
+    this[pxIndex + 1] = (color.green * 255.0).toInt().toByte()
+    this[pxIndex + 2] = (color.red * 255.0).toInt().toByte()
+    this[pxIndex + 3] = (color.opacity * 255.0).toInt().toByte()
+}
+
+fun ByteArray.fillRect(x: Int, y: Int, w: Int, h: Int, color: Color) {
+    for (xIdx in x until x + w) {
+        for (yIdx in y until y + h) {
+            writePixel(xIdx, yIdx, color)
+        }
+    }
+}
+
 data class Block(val color: Color,
                  val texture: Texture,
                  val passable: Boolean = false) {
