@@ -3,8 +3,10 @@ package edu.cwru.raycaster
 import javafx.scene.canvas.Canvas
 import javafx.scene.canvas.GraphicsContext
 import javafx.scene.image.Image
+import javafx.scene.image.PixelFormat
 import javafx.scene.paint.Color
 import javafx.scene.paint.Paint
+import java.nio.ByteBuffer
 
 class ContextualCanvas(private val width: Int, private val height: Int): Canvas(width.toDouble(), height.toDouble()) {
     val context: GraphicsContext = graphicsContext2D
@@ -25,6 +27,10 @@ class ContextualCanvas(private val width: Int, private val height: Int): Canvas(
 
     fun writePixel(x: Int, y: Int, color: Color) {
         context.pixelWriter.setColor(x, y, color)
+    }
+
+    fun writePixels(x: Int, y: Int, w: Int, h: Int, pixelFormat: PixelFormat<ByteBuffer>, buffer: ByteArray, offset: Int, scanlineStride: Int) {
+        context.pixelWriter.setPixels(x, y, w, h, pixelFormat, buffer, offset, scanlineStride)
     }
 
     fun fillRect(x: Number, y: Number, w: Number, h: Number, color: Color? = null) {
