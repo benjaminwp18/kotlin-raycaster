@@ -207,10 +207,66 @@ class Raycaster : Application() {
                 )
 
                 // Draws Sky and Floor
-                // TODO: Not sure how to make this work with textures
-                firstPersonCanvas.fillRect(0, 0, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, SKY_COLOR)
-                firstPersonCanvas.fillRect(0, FPV_HEIGHT_PX / 2, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, FLOOR_COLOR)
+                for (screenY in 0 until FPV_HEIGHT_PX){
+                    val rayDir0 = player.direction - player.camPlane
+                    val rayDir1 = player.direction + player.camPlane
 
+                    val p = screenY - FPV_HEIGHT_PX / 2
+
+                    val posZ = 0.5 * FPV_HEIGHT_PX.toDouble()
+
+                    val rowDistance = posZ / p.toDouble()
+
+                    val floorStep = Vec2Double(rayDir1 - rayDir0) * rowDistance / FPV_WIDTH_PX.toDouble()
+
+                    if (floorStep.x > 63 || floorStep.y > 63){
+                        println(floorStep)
+                    }
+                    if (floorStep.x < 0 || floorStep.y < 0){
+                        println(floorStep)
+                    }
+
+
+                    var floor = player.position + rayDir0 * rowDistance
+
+                    for (screenX in 0 until FPV_WIDTH_PX) {
+                        val cell = floor.toVec2Int()
+
+                        val texVec = Vec2Int(TEXTURE_WIDTH, TEXTURE_HEIGHT)
+
+                        val t = (texVec.toVec2Double() * (floor - cell.toVec2Double())).toVec2Int().min(texVec - 1)
+
+//                        if (t.x > 63 || t.y > 63){
+//                            println(t)
+//                        }
+//                        if (t.x < 0 || t.y < 0){
+//                            println(t)
+//                        }
+
+                        floor += floorStep
+
+                        val floorColor: Color
+                        val ceilColor: Color
+
+                        if (false){
+                            val MOSSY_READER = Texture.MOSSY.image.pixelReader
+                            floorColor = MOSSY_READER.getColor(t.x, t.y)
+//                            println(floorColor)
+                            val PURPLE_STONE_READER = Texture.PURPLE_STONE.image.pixelReader
+                            ceilColor = PURPLE_STONE_READER.getColor(t.x, t.y)
+                        }
+                        else{
+                            floorColor = Color.RED
+                            ceilColor = Color.BLACK
+                        }
+                        // Floor
+                        firstPersonCanvas.writePixel(screenX, screenY, floorColor)
+                        // Ceiling
+                        firstPersonCanvas.writePixel(screenX, FPV_HEIGHT_PX - screenY - 1, ceilColor)
+                    }
+                }
+
+                // Draws Walls
                 for (screenX in 0 until FPV_WIDTH_PX) {
                     val cameraX = 2 * screenX.toDouble() / FPV_WIDTH_PX - 1
 

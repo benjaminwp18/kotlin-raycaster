@@ -27,6 +27,10 @@ class ContextualCanvas(private val width: Int, private val height: Int): Canvas(
         context.pixelWriter.setColor(x, y, color)
     }
 
+    fun writePixel(pos: Vec2Int, color: Color) {
+        context.pixelWriter.setColor(pos.x, pos.y, color)
+    }
+
     fun fillRect(x: Number, y: Number, w: Number, h: Number, color: Color? = null) {
         val oldFill = fill
         if (color != null) {
