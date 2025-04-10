@@ -3,8 +3,26 @@ package edu.cwru.raycaster
 import javafx.scene.canvas.Canvas
 import javafx.scene.canvas.GraphicsContext
 import javafx.scene.image.Image
+import javafx.scene.image.PixelFormat
 import javafx.scene.paint.Color
 import javafx.scene.paint.Paint
+import java.nio.ByteBuffer
+
+fun ByteArray.writePixel(x: Int, y: Int, color: Color) {
+    val pxIndex = (y * FPV_WIDTH_PX + x) * FPV_BYTES_PER_PX
+    this[pxIndex] = (color.blue * 255.0).toInt().toByte()
+    this[pxIndex + 1] = (color.green * 255.0).toInt().toByte()
+    this[pxIndex + 2] = (color.red * 255.0).toInt().toByte()
+    this[pxIndex + 3] = (color.opacity * 255.0).toInt().toByte()
+}
+
+fun ByteArray.fillRect(x: Int, y: Int, w: Int, h: Int, color: Color) {
+    for (xIdx in x until x + w) {
+        for (yIdx in y until y + h) {
+            writePixel(xIdx, yIdx, color)
+        }
+    }
+}
 
 class ContextualCanvas(private val width: Int, private val height: Int): Canvas(width.toDouble(), height.toDouble()) {
     val context: GraphicsContext = graphicsContext2D
@@ -25,6 +43,10 @@ class ContextualCanvas(private val width: Int, private val height: Int): Canvas(
 
     fun writePixel(x: Int, y: Int, color: Color) {
         context.pixelWriter.setColor(x, y, color)
+    }
+
+    fun writePixels(x: Int, y: Int, w: Int, h: Int, pixelFormat: PixelFormat<ByteBuffer>, buffer: ByteArray, offset: Int, scanlineStride: Int) {
+        context.pixelWriter.setPixels(x, y, w, h, pixelFormat, buffer, offset, scanlineStride)
     }
 
     fun fillRect(x: Number, y: Number, w: Number, h: Number, color: Color? = null) {

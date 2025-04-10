@@ -4,11 +4,13 @@ import javafx.animation.AnimationTimer
 import javafx.application.Application
 import javafx.scene.Scene
 import javafx.scene.control.Label
+import javafx.scene.image.PixelFormat
 import javafx.scene.input.KeyCode
 import javafx.scene.layout.HBox
 import javafx.scene.layout.VBox
 import javafx.scene.paint.Color
 import javafx.stage.Stage
+import java.nio.ByteBuffer
 import kotlin.math.PI
 import kotlin.math.floor
 
@@ -84,6 +86,7 @@ val MAP_HEIGHT_PX = MAP_HEIGHT_BLOCKS * PX_PER_BLOCK
 
 const val FPV_WIDTH_PX = 800
 const val FPV_HEIGHT_PX = 400
+const val FPV_BYTES_PER_PX = 4
 
 fun Double.format(scale: Int) = "%.${scale}f".format(this)
 
@@ -167,7 +170,6 @@ class Raycaster : Application() {
                                 MAP[bottomRight.y.toInt()][topLeft.x.toInt()].passable and
                                 MAP[bottomRight.y.toInt()][bottomRight.x.toInt()].passable
                             ) {
-
                                 player.position = MutableVec2Double(newPos)
                             }
 
@@ -206,10 +208,14 @@ class Raycaster : Application() {
                     Color.RED
                 )
 
+                // TODO: Consider using a Buffer instead of an Array (and adding pixels horizontally) for performance
+                val buffer = ByteArray(FPV_WIDTH_PX * FPV_HEIGHT_PX * FPV_BYTES_PER_PX)
+                val pixelFormat: PixelFormat<ByteBuffer> = PixelFormat.getByteBgraPreInstance()
+
                 // Draws Sky and Floor
                 // TODO: Not sure how to make this work with textures
-                firstPersonCanvas.fillRect(0, 0, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, SKY_COLOR)
-                firstPersonCanvas.fillRect(0, FPV_HEIGHT_PX / 2, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, FLOOR_COLOR)
+                buffer.fillRect(0, 0, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, SKY_COLOR)
+                buffer.fillRect(0, FPV_HEIGHT_PX / 2, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, FLOOR_COLOR)
 
                 for (screenX in 0 until FPV_WIDTH_PX) {
                     val cameraX = 2 * screenX.toDouble() / FPV_WIDTH_PX - 1
@@ -293,7 +299,8 @@ class Raycaster : Application() {
                             if (hitSide == WallType.NorthSouth) {
                                 color = color.darker()
                             }
-                            firstPersonCanvas.writePixel(screenX, y, color)
+
+                            buffer.writePixel(screenX, y, color)
                         }
                     }
                     else {
@@ -303,7 +310,8 @@ class Raycaster : Application() {
                             color = color.darker()
                         }
 
-                        firstPersonCanvas.fillRect(screenX, drawStart, 1, lineHeight, color)
+                        // lineHeight is not clamped, so use drawEnd - drawStart to find real height
+                        buffer.fillRect(screenX, drawStart, 1, drawEnd - drawStart, color)
                     }
 
                     // Tag the block the player is in
@@ -331,6 +339,9 @@ class Raycaster : Application() {
                     val playerPlaneStartPx = playerDirPx - (player.camPlane * 20.0).toVec2Int()
                     topDownCanvas.strokeLine(playerPlaneStartPx.x, playerPlaneStartPx.y, playerPlaneEndPx.x, playerPlaneEndPx.y, Color.BLACK)
                 }
+
+                firstPersonCanvas.writePixels(0, 0, FPV_WIDTH_PX, FPV_HEIGHT_PX, pixelFormat, buffer,
+                    0, FPV_WIDTH_PX * FPV_BYTES_PER_PX)
             }
         }.start()
     }
