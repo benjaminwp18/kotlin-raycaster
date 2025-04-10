@@ -218,7 +218,7 @@ class Raycaster : Application() {
                     }
                 }
 
-                // Draws Player
+                // Draw player
                 topDownCanvas.fillRect(
                     (player.position.x * PX_PER_BLOCK).toInt() - PLAYER_RADIUS_PX,
                     (player.position.y * PX_PER_BLOCK).toInt() - PLAYER_RADIUS_PX,
@@ -230,7 +230,7 @@ class Raycaster : Application() {
                 val buffer = ByteArray(FPV_WIDTH_PX * FPV_HEIGHT_PX * FPV_BYTES_PER_PX)
                 val pixelFormat: PixelFormat<ByteBuffer> = PixelFormat.getByteBgraPreInstance()
 
-                // Draws Sky and Floor
+                // Draw sky and floor
                 if (USE_TEXTURES) {
                     for (screenY in 0 until FPV_HEIGHT_PX) {
                         val firstRayDir = player.direction - player.camPlane
@@ -263,7 +263,7 @@ class Raycaster : Application() {
                     buffer.fillRect(0, FPV_HEIGHT_PX / 2, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, FLOOR_COLOR)
                 }
 
-                // Draws Walls
+                // Draw walls
                 for (screenX in 0 until FPV_WIDTH_PX) {
                     val cameraX = 2 * screenX.toDouble() / FPV_WIDTH_PX - 1
 

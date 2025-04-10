@@ -110,7 +110,6 @@ interface VectorOperationsDouble : VectorOperations<Double> {
     val yPrime = x * sinAngle + y * cosAngle
     return Vec2Double(xPrime, yPrime)
   }
-
 }
 
 class Vec2Int(inputs: Iterable<Int>) : Vec2<Int>(inputs), VectorOperationsInt {
