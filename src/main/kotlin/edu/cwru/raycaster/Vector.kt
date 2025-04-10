@@ -35,10 +35,6 @@ open class Vec2<T>(inputs: Iterable<T>) where T : Comparable<T>, T : Number {
 
   val magnitude: Double
     get() = sqrt(x.toDouble().pow(2) + y.toDouble().pow(2))
-
-  fun min(vec: Vec2<T>): Vec2<T> {
-    return Vec2(minOf(x, vec.x), minOf(y, vec.y))
-  }
 }
 
 interface VectorOperations<T> where T : Comparable<T>, T : Number {
