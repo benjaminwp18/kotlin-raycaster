@@ -14,7 +14,6 @@ import java.nio.ByteBuffer
 import kotlin.math.PI
 import kotlin.math.floor
 
-
 const val NS_IN_S = 1_000_000_000.0
 
 const val TEXTURE_WIDTH = 64
@@ -44,6 +43,12 @@ val ROTATION_KEY_SIGNS = mapOf(
     KeyCode.Q to -1.0,
 )
 
+// Must manually type to get correct nullability from Java Color class
+val SKY_COLOR: Color = Color.LIGHTBLUE
+val FLOOR_COLOR: Color = Color.LIGHTGRAY
+val SKY_TEXTURE = Texture.WOOD
+val FLOOR_TEXTURE = Texture.GREY_STONE
+
 fun ByteArray.writePixel(x: Int, y: Int, color: Color) {
     val pxIndex = (y * FPV_WIDTH_PX + x) * FPV_BYTES_PER_PX
     this[pxIndex] = (color.blue * 255.0).toInt().toByte()
@@ -65,7 +70,7 @@ data class Block(val color: Color,
                  val passable: Boolean = false) {
     companion object {
         private val CHAR_TO_BLOCK = mapOf(
-            ' ' to Block(Color.WHITE, Texture.MOSSY, true),
+            ' ' to Block(Color.WHITE, FLOOR_TEXTURE, true),
             'B' to Block(Color.BLUE, Texture.BLUE_BRICK),
             'G' to Block(Color.GREEN, Texture.WOOD),
             'O' to Block(Color.ORANGE, Texture.EAGLE),
@@ -92,9 +97,6 @@ private val MAP = stringToBlockMap("""
     BBBBBB
 """.trimIndent())
 
-val SKY_COLOR: Color = Color.LIGHTBLUE
-val FLOOR_COLOR: Color = Color.LIGHTGRAY
-
 val MAP_WIDTH_BLOCKS = MAP[0].size
 val MAP_HEIGHT_BLOCKS = MAP.size
 val MAP_WIDTH_PX = MAP_WIDTH_BLOCKS * PX_PER_BLOCK
@@ -109,7 +111,7 @@ fun Double.format(scale: Int) = "%.${scale}f".format(this)
 class Player {
     var position = MutableVec2Double(2.0, 2.0)
     var direction = MutableVec2Double(-1.0, 0.0)
-    var camPlane = MutableVec2Double(0.0, 1.0)
+    var camPlane = MutableVec2Double(direction.rotate(PI / 2))
 }
 
 enum class WallType {
@@ -169,9 +171,9 @@ class Raycaster : Application() {
                 for ((key, pressed) in keyMap) {
                     if (pressed) {
                         if (key in ROTATION_KEY_SIGNS) {
-                            val newCamPlane = player.camPlane.rotate(ROTATION_KEY_SIGNS.getValue(key) * PLAYER_ANGULAR_VELOCITY * deltaSec)
-                            player.camPlane = MutableVec2Double(newCamPlane)
-                            player.direction = MutableVec2Double(newCamPlane.rotate(PI / 2))
+                            val newDirection = player.direction.rotate(ROTATION_KEY_SIGNS.getValue(key) * PLAYER_ANGULAR_VELOCITY * deltaSec)
+                            player.direction = MutableVec2Double(newDirection)
+                            player.camPlane = MutableVec2Double(newDirection.rotate(PI / 2))
                         }
                         else {
                             val direction = player.direction.rotate(STRAFE_KEY_ANGLES.getValue(key))
@@ -216,7 +218,7 @@ class Raycaster : Application() {
                     }
                 }
 
-                // Draws Player
+                // Draw player
                 topDownCanvas.fillRect(
                     (player.position.x * PX_PER_BLOCK).toInt() - PLAYER_RADIUS_PX,
                     (player.position.y * PX_PER_BLOCK).toInt() - PLAYER_RADIUS_PX,
@@ -228,16 +230,44 @@ class Raycaster : Application() {
                 val buffer = ByteArray(FPV_WIDTH_PX * FPV_HEIGHT_PX * FPV_BYTES_PER_PX)
                 val pixelFormat: PixelFormat<ByteBuffer> = PixelFormat.getByteBgraPreInstance()
 
-                // Draws Sky and Floor
-                // TODO: Not sure how to make this work with textures
-                buffer.fillRect(0, 0, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, SKY_COLOR)
-                buffer.fillRect(0, FPV_HEIGHT_PX / 2, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, FLOOR_COLOR)
+                // Draw sky and floor
+                if (USE_TEXTURES) {
+                    for (screenY in 0 until FPV_HEIGHT_PX) {
+                        val firstRayDir = player.direction - player.camPlane
+                        val lastRayDir = player.direction + player.camPlane
 
+                        val centeredScreenY = screenY - FPV_HEIGHT_PX / 2
+                        val posZ = 0.5 * FPV_HEIGHT_PX.toDouble()
+                        val rowDistance = posZ / centeredScreenY.toDouble()
+                        val floorStep = (lastRayDir - firstRayDir) * rowDistance / FPV_WIDTH_PX.toDouble()
+                        var floor = player.position + firstRayDir * rowDistance
+
+                        for (screenX in 0 until FPV_WIDTH_PX) {
+                            val cell = floor.toVec2Int()
+
+                            val tx = maxOf(minOf((TEXTURE_WIDTH * (floor.x - cell.x)).toInt(), TEXTURE_WIDTH - 1), 0)
+                            val ty = maxOf(minOf((TEXTURE_HEIGHT * (floor.y - cell.y)).toInt(), TEXTURE_HEIGHT - 1), 0)
+
+                            floor += floorStep
+
+                            val floorColor = FLOOR_TEXTURE.image.pixelReader.getColor(tx, ty)
+                            val ceilColor = SKY_TEXTURE.image.pixelReader.getColor(tx, ty)
+
+                            buffer.writePixel(screenX, screenY, floorColor)
+                            buffer.writePixel(screenX, FPV_HEIGHT_PX - screenY - 1, ceilColor)
+                        }
+                    }
+                }
+                else {
+                    buffer.fillRect(0, 0, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, SKY_COLOR)
+                    buffer.fillRect(0, FPV_HEIGHT_PX / 2, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, FLOOR_COLOR)
+                }
+
+                // Draw walls
                 for (screenX in 0 until FPV_WIDTH_PX) {
                     val cameraX = 2 * screenX.toDouble() / FPV_WIDTH_PX - 1
 
-                    // TODO: This is probably be "+ player.camPlane". Fix when real movement is written.
-                    val rayDir = player.direction - player.camPlane * cameraX
+                    val rayDir = player.direction + player.camPlane * cameraX
 
                     val rayMapPos = MutableVec2Int(player.position.toVec2Int())
                     val sideDist = MutableVec2Double(0.0, 0.0)
