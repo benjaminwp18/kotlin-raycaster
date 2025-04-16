@@ -109,6 +109,8 @@ const val FPV_SCALE = 1
 const val FPV_WIDTH_PX = FPV_ASPECT_WIDTH_PX * FPV_SCALE
 const val FPV_HEIGHT_PX = FPV_ASPECT_HEIGHT_PX * FPV_SCALE
 
+const val LOG_PERFORMANCE_METRICS = false
+
 fun Double.format(scale: Int) = "%.${scale}f".format(this)
 
 class Player {
@@ -180,31 +182,40 @@ class Raycaster : Application() {
                 }
 
                 var time1 = System.currentTimeMillis()
+                var time2: Long
 
                 updateState(deltaSec)
-                var time2 = System.currentTimeMillis()
-                println("State update used: ${time2 - time1}")
-                time1 = time2
+                if (LOG_PERFORMANCE_METRICS) {
+                    var time2 = System.currentTimeMillis()
+                    println("State update used: ${time2 - time1}")
+                    time1 = time2
+                }
 
                 withContext(Dispatchers.Main) {
                     drawTopDownMap()
                 }
-                time2 = System.currentTimeMillis()
-                println("Top down draw used: ${time2 - time1}")
-                time1 = time2
+                if (LOG_PERFORMANCE_METRICS) {
+                    time2 = System.currentTimeMillis()
+                    println("Top down draw used: ${time2 - time1}")
+                    time1 = time2
+                }
 
                 updateFPVBuffer()
-                time2 = System.currentTimeMillis()
-                println("FPV buffer update used: ${time2 - time1}")
-                time1 = time2
+                if (LOG_PERFORMANCE_METRICS) {
+                    time2 = System.currentTimeMillis()
+                    println("FPV buffer update used: ${time2 - time1}")
+                    time1 = time2
+                }
 
                 val job = launch(Dispatchers.Main) {
                     drawFPVBuffer()
                 }
                 job.join()
-                time2 = System.currentTimeMillis()
-                println("FPV buffer draw used: ${time2 - time1}")
-                time1 = time2
+                if (LOG_PERFORMANCE_METRICS) {
+                    time2 = System.currentTimeMillis()
+                    println("FPV buffer draw used: ${time2 - time1}")
+                    time1 = time2
+                }
             }
         }
     }
