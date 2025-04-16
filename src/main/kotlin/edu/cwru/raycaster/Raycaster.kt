@@ -4,15 +4,16 @@ import javafx.animation.AnimationTimer
 import javafx.application.Application
 import javafx.scene.Scene
 import javafx.scene.control.Label
+import javafx.scene.image.PixelFormat
 import javafx.scene.input.KeyCode
 import javafx.scene.layout.HBox
 import javafx.scene.layout.VBox
 import javafx.scene.paint.Color
 import javafx.stage.Stage
+import java.nio.ByteBuffer
 import kotlin.math.PI
 import kotlin.math.floor
 import kotlin.math.tanh
-
 
 const val NS_IN_S = 1_000_000_000.0
 
@@ -48,12 +49,34 @@ val ROTATION_KEY_SIGNS = mapOf(
     KeyCode.Q to -1.0,
 )
 
+// Must manually type to get correct nullability from Java Color class
+val SKY_COLOR: Color = Color.LIGHTBLUE
+val FLOOR_COLOR: Color = Color.LIGHTGRAY
+val SKY_TEXTURE = Texture.WOOD
+val FLOOR_TEXTURE = Texture.GREY_STONE
+
+fun ByteArray.writePixel(x: Int, y: Int, color: Color) {
+    val pxIndex = (y * FPV_WIDTH_PX + x) * FPV_BYTES_PER_PX
+    this[pxIndex] = (color.blue * 255.0).toInt().toByte()
+    this[pxIndex + 1] = (color.green * 255.0).toInt().toByte()
+    this[pxIndex + 2] = (color.red * 255.0).toInt().toByte()
+    this[pxIndex + 3] = (color.opacity * 255.0).toInt().toByte()
+}
+
+fun ByteArray.fillRect(x: Int, y: Int, w: Int, h: Int, color: Color) {
+    for (xIdx in x until x + w) {
+        for (yIdx in y until y + h) {
+            writePixel(xIdx, yIdx, color)
+        }
+    }
+}
+
 data class Block(val color: Color,
                  val texture: Texture,
                  val passable: Boolean = false) {
     companion object {
         private val CHAR_TO_BLOCK = mapOf(
-            ' ' to Block(Color.WHITE, Texture.MOSSY, true),
+            ' ' to Block(Color.WHITE, FLOOR_TEXTURE, true),
             'B' to Block(Color.BLUE, Texture.BLUE_BRICK),
             'G' to Block(Color.GREEN, Texture.WOOD),
             'O' to Block(Color.ORANGE, Texture.EAGLE),
@@ -80,9 +103,6 @@ private val MAP = stringToBlockMap("""
     BBBBBB
 """.trimIndent())
 
-val SKY_COLOR: Color = Color.LIGHTBLUE
-val FLOOR_COLOR: Color = Color.LIGHTGRAY
-
 val MAP_WIDTH_BLOCKS = MAP[0].size
 val MAP_HEIGHT_BLOCKS = MAP.size
 val MAP_WIDTH_PX = MAP_WIDTH_BLOCKS * PX_PER_BLOCK
@@ -90,6 +110,7 @@ val MAP_HEIGHT_PX = MAP_HEIGHT_BLOCKS * PX_PER_BLOCK
 
 const val FPV_WIDTH_PX = 800
 const val FPV_HEIGHT_PX = 400
+const val FPV_BYTES_PER_PX = 4
 val FPV_VIEW_CENTER = Vec2Int(FPV_WIDTH_PX / 2, FPV_HEIGHT_PX / 2)
 
 fun Double.format(scale: Int) = "%.${scale}f".format(this)
@@ -97,7 +118,7 @@ fun Double.format(scale: Int) = "%.${scale}f".format(this)
 class Player {
     var position = MutableVec2Double(2.0, 2.0)
     var direction = MutableVec2Double(-1.0, 0.0)
-    var camPlane = MutableVec2Double(0.0, 1.0)
+    var camPlane = MutableVec2Double(direction.rotate(PI / 2))
 }
 
 enum class WallType {
@@ -157,9 +178,9 @@ class Raycaster : Application() {
                 for ((key, pressed) in keyMap) {
                     if (pressed) {
                         if (key in ROTATION_KEY_SIGNS) {
-                            val newCamPlane = player.camPlane.rotate(ROTATION_KEY_SIGNS.getValue(key) * PLAYER_ANGULAR_VELOCITY * deltaSec)
-                            player.camPlane = MutableVec2Double(newCamPlane)
-                            player.direction = MutableVec2Double(newCamPlane.rotate(PI / 2))
+                            val newDirection = player.direction.rotate(ROTATION_KEY_SIGNS.getValue(key) * PLAYER_ANGULAR_VELOCITY * deltaSec)
+                            player.direction = MutableVec2Double(newDirection)
+                            player.camPlane = MutableVec2Double(newDirection.rotate(PI / 2))
                         }
                         else {
                             val direction = player.direction.rotate(STRAFE_KEY_ANGLES.getValue(key))
@@ -174,7 +195,6 @@ class Raycaster : Application() {
                                 MAP[bottomRight.y.toInt()][topLeft.x.toInt()].passable and
                                 MAP[bottomRight.y.toInt()][bottomRight.x.toInt()].passable
                             ) {
-
                                 player.position = MutableVec2Double(newPos)
                             }
 
@@ -205,7 +225,7 @@ class Raycaster : Application() {
                     }
                 }
 
-                // Draws Player
+                // Draw player
                 topDownCanvas.fillRect(
                     (player.position.x * PX_PER_BLOCK).toInt() - PLAYER_RADIUS_PX,
                     (player.position.y * PX_PER_BLOCK).toInt() - PLAYER_RADIUS_PX,
@@ -213,16 +233,71 @@ class Raycaster : Application() {
                     Color.RED
                 )
 
-                // Draws Sky and Floor
-                // TODO: Not sure how to make this work with textures
-                firstPersonCanvas.fillRect(0, 0, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, SKY_COLOR)
-                firstPersonCanvas.fillRect(0, FPV_HEIGHT_PX / 2, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, FLOOR_COLOR)
+                // TODO: Consider using a Buffer instead of an Array (and adding pixels horizontally) for performance
+                val buffer = ByteArray(FPV_WIDTH_PX * FPV_HEIGHT_PX * FPV_BYTES_PER_PX)
+                val pixelFormat: PixelFormat<ByteBuffer> = PixelFormat.getByteBgraPreInstance()
 
+                // Draw sky and floor
+                if (USE_TEXTURES) {
+                    for (screenY in 0 until FPV_HEIGHT_PX) {
+                        val firstRayDir = player.direction - player.camPlane
+                        val lastRayDir = player.direction + player.camPlane
+
+                        val centeredScreenY = screenY - FPV_HEIGHT_PX / 2
+                        val posZ = 0.5 * FPV_HEIGHT_PX.toDouble()
+                        val rowDistance = posZ / centeredScreenY.toDouble()
+                        val floorStep = (lastRayDir - firstRayDir) * rowDistance / FPV_WIDTH_PX.toDouble()
+                        var floor = player.position + firstRayDir * rowDistance
+
+                        if (FLASHLIGHT_PENETRATION_BLOCKS < rowDistance) {
+                            buffer.fillRect(0, screenY, FPV_WIDTH_PX, 1, Color.BLACK)
+                            buffer.fillRect(0, FPV_HEIGHT_PX - screenY - 1, FPV_WIDTH_PX, 1, Color.BLACK)
+                        }
+                        else {
+                            for (screenX in 0 until FPV_WIDTH_PX) {
+                                val cell = floor.toVec2Int()
+
+                                val tx = maxOf(minOf((TEXTURE_WIDTH * (floor.x - cell.x)).toInt(), TEXTURE_WIDTH - 1), 0)
+                                val ty = maxOf(minOf((TEXTURE_HEIGHT * (floor.y - cell.y)).toInt(), TEXTURE_HEIGHT - 1), 0)
+
+                                floor += floorStep
+
+                                var floorColor = FLOOR_TEXTURE.image.pixelReader.getColor(tx, ty)
+                                var ceilColor = SKY_TEXTURE.image.pixelReader.getColor(tx, ty)
+
+                                // Vignette
+                                val screenPos = Vec2Int(screenX, screenY) - FPV_VIEW_CENTER
+                                val normDistFromCenter = screenPos.magnitude / FPV_VIEW_CENTER.magnitude
+                                val tanhActivation = (-0.5 * (FLASHLIGHT_CIRCLE_STEEPNESS *
+                                        (normDistFromCenter - FLASHLIGHT_RADIUS)) + 0.5).coerceIn(0.0, 1.0)
+
+                                // Penetration
+                                val inverseNormRayDist = maxOf(1.0 - rowDistance / FLASHLIGHT_PENETRATION_BLOCKS, 0.0)
+
+//                                color = Color.color(
+//                                    FLASHLIGHT_COLOR.red * color.red,
+//                                    FLASHLIGHT_COLOR.green * color.green,
+//                                    FLASHLIGHT_COLOR.blue * color.blue
+//                                )
+                                floorColor = floorColor.deriveColor(0.0, 1.0, inverseNormRayDist * tanhActivation, 1.0)
+                                ceilColor = ceilColor.deriveColor(0.0, 1.0, inverseNormRayDist * tanhActivation, 1.0)
+
+                                buffer.writePixel(screenX, screenY, floorColor)
+                                buffer.writePixel(screenX, FPV_HEIGHT_PX - screenY - 1, ceilColor)
+                            }
+                        }
+                    }
+                }
+                else {
+                    buffer.fillRect(0, 0, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, SKY_COLOR)
+                    buffer.fillRect(0, FPV_HEIGHT_PX / 2, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, FLOOR_COLOR)
+                }
+
+                // Draw walls
                 for (screenX in 0 until FPV_WIDTH_PX) {
                     val cameraX = 2 * screenX.toDouble() / FPV_WIDTH_PX - 1
 
-                    // TODO: This is probably be "+ player.camPlane". Fix when real movement is written.
-                    val rayDir = player.direction - player.camPlane * cameraX
+                    val rayDir = player.direction + player.camPlane * cameraX
 
                     val rayMapPos = MutableVec2Int(player.position.toVec2Int())
                     val sideDist = MutableVec2Double(0.0, 0.0)
@@ -276,48 +351,54 @@ class Raycaster : Application() {
                     val drawEnd = minOf(FPV_HEIGHT_PX / 2 + lineHeight / 2, FPV_HEIGHT_PX - 1)
 
                     if (USE_TEXTURES) {
-                        val textureReader = MAP[rayMapPos.y][rayMapPos.x].texture.image.pixelReader
-
-                        var wallX =
-                            if (hitSide == WallType.EastWest) player.position.y + perpWallDist * rayDir.y
-                            else player.position.x + perpWallDist * rayDir.x
-                        wallX -= floor(wallX)
-
-                        var texX = (wallX * TEXTURE_WIDTH.toDouble()).toInt()
-                        if ((hitSide == WallType.EastWest && rayDir.x > 0) ||
-                            (hitSide == WallType.NorthSouth && rayDir.y < 0)
-                        ) {
-                            texX = TEXTURE_WIDTH - texX - 1
+                        if (FLASHLIGHT_PENETRATION_BLOCKS < perpWallDist) {
+                            buffer.fillRect(screenX, drawStart, 1, drawEnd - drawStart, Color.BLACK)
                         }
+                        else {
+                            val textureReader = MAP[rayMapPos.y][rayMapPos.x].texture.image.pixelReader
 
-                        val step = 1.0 * TEXTURE_HEIGHT /  lineHeight
-                        var texPos = (drawStart - FPV_HEIGHT_PX / 2 + lineHeight / 2) * step
+                            var wallX =
+                                if (hitSide == WallType.EastWest) player.position.y + perpWallDist * rayDir.y
+                                else player.position.x + perpWallDist * rayDir.x
+                            wallX -= floor(wallX)
 
-                        for (screenY in drawStart until drawEnd) {
-                            val texY = minOf(texPos.toInt(), TEXTURE_HEIGHT - 1)
-                            texPos += step
-                            var color = textureReader.getColor(texX, texY)
+                            var texX = (wallX * TEXTURE_WIDTH.toDouble()).toInt()
+                            if ((hitSide == WallType.EastWest && rayDir.x > 0) ||
+                                (hitSide == WallType.NorthSouth && rayDir.y < 0)
+                            ) {
+                                texX = TEXTURE_WIDTH - texX - 1
+                            }
 
-                            // Vignette
-                            val screenPos = Vec2Int(screenX, screenY) - FPV_VIEW_CENTER
-                            val distFromCenter = screenPos.magnitude
-                            val normDistFromCenter = distFromCenter / FPV_VIEW_CENTER.magnitude
-                            val tanhActivation = -0.5 * tanh(FLASHLIGHT_CIRCLE_STEEPNESS * (normDistFromCenter - FLASHLIGHT_RADIUS)) + 0.5
+                            val step = 1.0 * TEXTURE_HEIGHT / lineHeight
+                            var texPos = (drawStart - FPV_HEIGHT_PX / 2 + lineHeight / 2) * step
 
-                            // Penetration
-                            val inverseNormRayDist = maxOf(1.0 - perpWallDist / FLASHLIGHT_PENETRATION_BLOCKS, 0.0)
+                            for (screenY in drawStart until drawEnd) {
+                                val texY = minOf(texPos.toInt(), TEXTURE_HEIGHT - 1)
+                                texPos += step
+                                var color = textureReader.getColor(texX, texY)
 
-                            color = Color.color(
-                                FLASHLIGHT_COLOR.red * color.red,
-                                FLASHLIGHT_COLOR.green * color.green,
-                                FLASHLIGHT_COLOR.blue * color.blue
-                            )
-                            color = color.deriveColor(0.0, 1.0, inverseNormRayDist * tanhActivation, 1.0)
+                                // Vignette
+                                val screenPos = Vec2Int(screenX, screenY) - FPV_VIEW_CENTER
+                                val normDistFromCenter = screenPos.magnitude / FPV_VIEW_CENTER.magnitude
+                                val tanhActivation = (-0.5 * (FLASHLIGHT_CIRCLE_STEEPNESS *
+                                        (normDistFromCenter - FLASHLIGHT_RADIUS)) + 0.5).coerceIn(0.0, 1.0)
 
-//                            if (hitSide == WallType.NorthSouth) {
-//                                color = color.darker()
-//                            }
-                            firstPersonCanvas.writePixel(screenX, screenY, color)
+                                // Penetration
+                                val inverseNormRayDist = maxOf(1.0 - perpWallDist / FLASHLIGHT_PENETRATION_BLOCKS, 0.0)
+
+                                color = Color.color(
+                                    FLASHLIGHT_COLOR.red * color.red,
+                                    FLASHLIGHT_COLOR.green * color.green,
+                                    FLASHLIGHT_COLOR.blue * color.blue
+                                )
+                                color = color.deriveColor(0.0, 1.0, inverseNormRayDist * tanhActivation, 1.0)
+
+//                                if (hitSide == WallType.NorthSouth) {
+//                                    color = color.darker()
+//                                }
+
+                                buffer.writePixel(screenX, screenY, color)
+                            }
                         }
                     }
                     else {
@@ -327,7 +408,8 @@ class Raycaster : Application() {
                             color = color.darker()
                         }
 
-                        firstPersonCanvas.fillRect(screenX, drawStart, 1, lineHeight, color)
+                        // lineHeight is not clamped, so use drawEnd - drawStart to find real height
+                        buffer.fillRect(screenX, drawStart, 1, drawEnd - drawStart, color)
                     }
 
                     // Tag the block the player is in
@@ -343,7 +425,8 @@ class Raycaster : Application() {
                     topDownCanvas.strokeLine(
                         playerPosPx.x, playerPosPx.y,
                         rayDirPx.x, rayDirPx.y,
-                        Color.rgb(255, 0, (255.0 * (screenX / FPV_WIDTH_PX.toDouble())).toInt())
+                        if (FLASHLIGHT_PENETRATION_BLOCKS < perpWallDist) Color.BLACK
+                        else Color.rgb(255, 0, (255.0 * (screenX / FPV_WIDTH_PX.toDouble())).toInt())
                     )
 
                     // Draw line in the player's direction
@@ -355,6 +438,9 @@ class Raycaster : Application() {
                     val playerPlaneStartPx = playerDirPx - (player.camPlane * 20.0).toVec2Int()
                     topDownCanvas.strokeLine(playerPlaneStartPx.x, playerPlaneStartPx.y, playerPlaneEndPx.x, playerPlaneEndPx.y, Color.BLACK)
                 }
+
+                firstPersonCanvas.writePixels(0, 0, FPV_WIDTH_PX, FPV_HEIGHT_PX, pixelFormat, buffer,
+                    0, FPV_WIDTH_PX * FPV_BYTES_PER_PX)
             }
         }.start()
     }
