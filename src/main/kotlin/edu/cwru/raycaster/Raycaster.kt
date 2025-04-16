@@ -198,9 +198,10 @@ class Raycaster : Application() {
                 println("FPV buffer update used: ${time2 - time1}")
                 time1 = time2
 
-                withContext(Dispatchers.Main) {
+                val job = launch(Dispatchers.Main) {
                     drawFPVBuffer()
                 }
+                job.join()
                 time2 = System.currentTimeMillis()
                 println("FPV buffer draw used: ${time2 - time1}")
                 time1 = time2
@@ -303,9 +304,9 @@ class Raycaster : Application() {
             val maxTextureX = TEXTURE_WIDTH - 1
             val maxTextureY = TEXTURE_HEIGHT - 1
 
-            val floorStripeSize = FPV_ASPECT_HEIGHT_PX / numCores + 1  // Last stripe may be smaller than others
+            val floorStripeSize = halfHeight / numCores + 1  // Last stripe may be smaller than others
 
-            val floorStripeJobs = (0 until FPV_ASPECT_HEIGHT_PX step floorStripeSize).map { stripeStart ->
+            val floorStripeJobs = (halfHeight until FPV_ASPECT_HEIGHT_PX step floorStripeSize).map { stripeStart ->
                 launch(Dispatchers.Default) {
                     for (screenY in stripeStart until minOf(stripeStart + floorStripeSize, FPV_ASPECT_HEIGHT_PX)) {
                         val centeredScreenY = screenY - halfHeight
@@ -327,8 +328,15 @@ class Raycaster : Application() {
                             val floorColor = FLOOR_TEXTURE.image.pixelReader.getColor(textureX, textureY)
                             val ceilColor = SKY_TEXTURE.image.pixelReader.getColor(textureX, textureY)
 
-                            FPVBuffer.fillRect(screenX * FPV_SCALE, screenY * FPV_SCALE, FPV_SCALE, FPV_SCALE, floorColor)
-                            FPVBuffer.fillRect(screenX * FPV_SCALE, (FPV_ASPECT_HEIGHT_PX - screenY - 1) * FPV_SCALE, FPV_SCALE, FPV_SCALE, ceilColor)
+                            FPVBuffer.fillRect(
+                                screenX * FPV_SCALE, screenY * FPV_SCALE,
+                                FPV_SCALE, FPV_SCALE, floorColor
+                            )
+
+                            FPVBuffer.fillRect(
+                                screenX * FPV_SCALE, (FPV_ASPECT_HEIGHT_PX - screenY - 1) * FPV_SCALE,
+                                FPV_SCALE, FPV_SCALE, ceilColor
+                            )
 
                             floorX += floorStep.x
                             floorY += floorStep.y
