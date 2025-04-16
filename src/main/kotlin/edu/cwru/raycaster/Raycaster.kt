@@ -102,10 +102,10 @@ val MAP_HEIGHT_BLOCKS = MAP.size
 val MAP_WIDTH_PX = MAP_WIDTH_BLOCKS * PX_PER_BLOCK
 val MAP_HEIGHT_PX = MAP_HEIGHT_BLOCKS * PX_PER_BLOCK
 
-const val FPV_ASPECT_WIDTH_PX = 400
-const val FPV_ASPECT_HEIGHT_PX = 200
+const val FPV_ASPECT_WIDTH_PX = 800
+const val FPV_ASPECT_HEIGHT_PX = 400
 const val FPV_BYTES_PER_PX = 4
-const val FPV_SCALE = 2
+const val FPV_SCALE = 1
 const val FPV_WIDTH_PX = FPV_ASPECT_WIDTH_PX * FPV_SCALE
 const val FPV_HEIGHT_PX = FPV_ASPECT_HEIGHT_PX * FPV_SCALE
 
@@ -289,7 +289,9 @@ class Raycaster : Application() {
         topDownCanvas.strokeLine(playerPlaneStartPx.x, playerPlaneStartPx.y, playerPlaneEndPx.x, playerPlaneEndPx.y, Color.BLACK)
     }
 
-    private fun updateFPVBuffer() {
+    private suspend fun updateFPVBuffer() = coroutineScope {
+        val numCores = 8
+
 //        val playerPosPx = (player.position * PX_PER_BLOCK.toDouble()).toVec2Int()
         // Draw sky and floor
         if (USE_TEXTURES) {
@@ -301,9 +303,11 @@ class Raycaster : Application() {
             val maxTextureX = TEXTURE_WIDTH - 1
             val maxTextureY = TEXTURE_HEIGHT - 1
 
-            runBlocking {
-                for (screenY in 0 until FPV_ASPECT_HEIGHT_PX) {
-                    launch {
+            val floorStripeSize = FPV_ASPECT_HEIGHT_PX / numCores + 1  // Last stripe may be smaller than others
+
+            val floorStripeJobs = (0 until FPV_ASPECT_HEIGHT_PX step floorStripeSize).map { stripeStart ->
+                launch(Dispatchers.Default) {
+                    for (screenY in stripeStart until minOf(stripeStart + floorStripeSize, FPV_ASPECT_HEIGHT_PX)) {
                         val centeredScreenY = screenY - halfHeight
                         val rowDistance = posZ / centeredScreenY.toDouble()
                         val floorStep = (lastRayDir - firstRayDir) * (rowDistance * invWidth)
@@ -332,6 +336,8 @@ class Raycaster : Application() {
                     }
                 }
             }
+
+            floorStripeJobs.joinAll()
         }
         else {
             FPVBuffer.fillRect(0, 0, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, SKY_COLOR)
@@ -339,9 +345,11 @@ class Raycaster : Application() {
         }
 
         // Draw walls
-        runBlocking {
-            for (screenX in 0 until FPV_ASPECT_WIDTH_PX) {
-                launch {
+        val wallStripeSize = FPV_ASPECT_WIDTH_PX / numCores + 1  // Last stripe may be smaller than others
+
+        val wallStripeJobs = (0 until FPV_ASPECT_WIDTH_PX step wallStripeSize).map { stripeStart ->
+            launch(Dispatchers.Default) {
+                for (screenX in stripeStart until minOf(stripeStart + wallStripeSize, FPV_ASPECT_WIDTH_PX)) {
                     val cameraX = 2 * screenX.toDouble() / FPV_ASPECT_WIDTH_PX - 1
 
                     val rayDir = player.direction + player.camPlane * cameraX
@@ -356,16 +364,14 @@ class Raycaster : Application() {
                     if (rayDir.x < 0) {
                         step.x = -1
                         sideDist.x = (player.position.x - rayMapPos.x) * deltaDist.x
-                    }
-                    else {
+                    } else {
                         step.x = 1
                         sideDist.x = (-player.position.x + rayMapPos.x + 1.0) * deltaDist.x
                     }
                     if (rayDir.y < 0) {
                         step.y = -1
                         sideDist.y = (player.position.y - rayMapPos.y) * deltaDist.y
-                    }
-                    else {
+                    } else {
                         step.y = 1
                         sideDist.y = (-player.position.y + rayMapPos.y + 1.0) * deltaDist.y
                     }
@@ -375,8 +381,7 @@ class Raycaster : Application() {
                             sideDist.x += deltaDist.x
                             rayMapPos.x += step.x
                             hitSide = WallType.EastWest
-                        }
-                        else {
+                        } else {
                             sideDist.y += deltaDist.y
                             rayMapPos.y += step.y
                             hitSide = WallType.NorthSouth
@@ -412,7 +417,7 @@ class Raycaster : Application() {
                             texX = TEXTURE_WIDTH - texX - 1
                         }
 
-                        val step = 1.0 * TEXTURE_HEIGHT /  lineHeight
+                        val step = 1.0 * TEXTURE_HEIGHT / lineHeight
                         var texPos = (drawStart - FPV_ASPECT_HEIGHT_PX / 2 + lineHeight / 2) * step
 
                         for (y in drawStart until drawEnd) {
@@ -425,8 +430,7 @@ class Raycaster : Application() {
 
                             FPVBuffer.fillRect(screenX * FPV_SCALE, y * FPV_SCALE, FPV_SCALE, FPV_SCALE, color)
                         }
-                    }
-                    else {
+                    } else {
                         var color = MAP[rayMapPos.y][rayMapPos.x].color
 
                         if (hitSide == WallType.NorthSouth) {
@@ -434,7 +438,13 @@ class Raycaster : Application() {
                         }
 
                         // lineHeight is not clamped, so use drawEnd - drawStart to find real height
-                        FPVBuffer.fillRect(screenX * FPV_SCALE, drawStart * FPV_SCALE, 1 * FPV_SCALE, (drawEnd - drawStart) * FPV_SCALE, color)
+                        FPVBuffer.fillRect(
+                            screenX * FPV_SCALE,
+                            drawStart * FPV_SCALE,
+                            1 * FPV_SCALE,
+                            (drawEnd - drawStart) * FPV_SCALE,
+                            color
+                        )
                     }
 
                     //            // Tag the blocks the rays hit
@@ -451,7 +461,7 @@ class Raycaster : Application() {
             }
         }
 
-
+        wallStripeJobs.joinAll()
     }
 }
 
