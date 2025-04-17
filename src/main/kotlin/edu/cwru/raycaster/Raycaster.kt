@@ -41,9 +41,14 @@ const val ENABLE_FLASHLIGHT = ENABLE_FLASHLIGHT_FOG || ENABLE_FLASHLIGHT_VIGNETT
 const val FLASHLIGHT_VIGNETTE_STEEPNESS = 10.0
 const val FLASHLIGHT_VIGNETTE_RADIUS = 0.5
 
+const val TOP_DOWN_RADIUS_BLOCKS = 4
+const val TOP_DOWN_SIZE_BLOCKS = TOP_DOWN_RADIUS_BLOCKS * 2 + 1
+const val TOP_DOWN_SIZE_PX = TOP_DOWN_SIZE_BLOCKS * PX_PER_BLOCK
+val TOP_DOWN_CLEAR_COLOR = Color.DARKBLUE
+
 // Size before scaling:
 const val FPV_ASPECT_WIDTH_PX = 800
-const val FPV_ASPECT_HEIGHT_PX = 400
+const val FPV_ASPECT_HEIGHT_PX = 500
 val FPV_ASPECT_CENTER = Vec2Int(FPV_ASPECT_WIDTH_PX / 2, FPV_ASPECT_HEIGHT_PX / 2)
 
 const val FPV_SCALE = 1
@@ -90,7 +95,7 @@ enum class WallType {
 }
 
 class Player {
-    var position = MutableVec2Double(2.0, 2.0)
+    var position = MutableVec2Double(1.5, 1.5)
     var direction = MutableVec2Double(-1.0, 0.0)
     var camPlane = MutableVec2Double(direction.rotate(PI / 2))
     var mouseDx = 0.0
@@ -113,7 +118,7 @@ class Raycaster : Application() {
     private var prevFrameTime = 0L
     private val player = Player()
     private val map = Map()
-    private val topDownCanvas = ContextualCanvas(map.mapWidthPx, map.mapHeightPx)
+    private val topDownCanvas = ContextualCanvas(TOP_DOWN_SIZE_PX, TOP_DOWN_SIZE_PX)
     private val firstPersonCanvas = ContextualCanvas(FPV_WIDTH_PX, FPV_HEIGHT_PX)
     private val frameRateLabel = Label("No FPS data")
 
@@ -140,15 +145,17 @@ class Raycaster : Application() {
                 children.add(StackPane().apply {
                     children.add(topDownCanvas.apply { alignment = Pos.CENTER })
                     padding = padding20
+                    alignment = Pos.CENTER
                 })
                 children.add(StackPane().apply {
                     children.add(firstPersonCanvas.apply { alignment = Pos.CENTER })
                     padding = padding20
+                    alignment = Pos.CENTER
                 })
             })
         }
 
-        primaryStage.scene = Scene(root, map.mapWidthPx + FPV_WIDTH_PX + 4 * 20.0, FPV_HEIGHT_PX + 200.0).apply {
+        primaryStage.scene = Scene(root, TOP_DOWN_SIZE_PX + FPV_WIDTH_PX + 4 * 20.0, maxOf(TOP_DOWN_SIZE_PX, FPV_HEIGHT_PX) + 200.0).apply {
             setOnKeyPressed {
                 if (it.code in keyMap.keys) {
                     keyMap[it.code] = true
@@ -280,10 +287,19 @@ class Raycaster : Application() {
     }
 
     private fun drawTopDownMap() {
-        for ((y, row) in map.map.withIndex()) {
-            for ((x, block) in row.withIndex()) {
-                val xLocation = x * PX_PER_BLOCK
-                val yLocation = y * PX_PER_BLOCK
+        topDownCanvas.fillRect(0, 0, TOP_DOWN_SIZE_PX, TOP_DOWN_SIZE_PX, TOP_DOWN_CLEAR_COLOR)
+
+        val intPos = player.position.toVec2Int()
+
+        val mapYRange = maxOf(intPos.y - TOP_DOWN_RADIUS_BLOCKS, 0) .. minOf(intPos.y + TOP_DOWN_RADIUS_BLOCKS, map.map.size - 1)
+        val mapXRange = maxOf(intPos.x - TOP_DOWN_RADIUS_BLOCKS, 0) .. minOf(intPos.x + TOP_DOWN_RADIUS_BLOCKS, map.map[0].size - 1)
+        val yOffset = maxOf(TOP_DOWN_RADIUS_BLOCKS - intPos.y, 0)
+        val xOffset = maxOf(TOP_DOWN_RADIUS_BLOCKS - intPos.x, 0)
+
+        for ((y, row) in map.map.slice(mapYRange).withIndex()) {
+            for ((x, block) in row.slice(mapXRange).withIndex()) {
+                val xLocation = (xOffset + x) * PX_PER_BLOCK
+                val yLocation = (yOffset + y) * PX_PER_BLOCK
                 if (USE_TEXTURES) {
                     topDownCanvas.drawImage(block.texture.image, xLocation, yLocation)
                 }
@@ -297,36 +313,32 @@ class Raycaster : Application() {
             }
         }
 
+        val playerLocalPosBlocks = player.position - intPos.toVec2Double() + TOP_DOWN_RADIUS_BLOCKS.toDouble()
+        val playerLocalPosPx = (playerLocalPosBlocks * PX_PER_BLOCK.toDouble()).toVec2Int()
+
         // Draw player
         topDownCanvas.fillRect(
-            (player.position.x * PX_PER_BLOCK).toInt() - PLAYER_RADIUS_PX,
-            (player.position.y * PX_PER_BLOCK).toInt() - PLAYER_RADIUS_PX,
+            playerLocalPosPx.x - PLAYER_RADIUS_PX,
+            playerLocalPosPx.y - PLAYER_RADIUS_PX,
             PLAYER_RADIUS_PX * 2, PLAYER_RADIUS_PX * 2,
             Color.RED
         )
 
-        val playerPosPx = player.positionPx
-
+        // Draw lines for rays
         for (ray in player.debugRays) {
-            // Tag the blocks the rays hit
-            topDownCanvas.fillRect(ray.endBlock.x * PX_PER_BLOCK, ray.endBlock.y * PX_PER_BLOCK, 10, 10, Color.GREEN)
-
-            // Draw lines for rays
-            val rayDirPx = (ray.end * PX_PER_BLOCK.toDouble()).toVec2Int()
+            val rayEndBlocks = MutableVec2Double(ray.end + playerLocalPosBlocks)
+            val rayEndPx = (rayEndBlocks * PX_PER_BLOCK.toDouble()).toVec2Int()
             topDownCanvas.strokeLine(
-                playerPosPx.x, playerPosPx.y,
-                rayDirPx.x, rayDirPx.y,
-                Color.rgb(255, 0, (255.0 * (ray.index / FPV_WIDTH_PX.toDouble())).toInt())
+                playerLocalPosPx.x, playerLocalPosPx.y,
+                rayEndPx.x, rayEndPx.y,
+                if (ray.index < 0) Color.BLACK
+                else Color.rgb(255, 0, (255.0 * (ray.index / FPV_WIDTH_PX.toDouble())).toInt())
             )
         }
 
-        // Tag the block the player is in
-        val playerBlock = player.position.toVec2Int()
-        topDownCanvas.fillRect(playerBlock.x * PX_PER_BLOCK, playerBlock.y * PX_PER_BLOCK, 10, 10, Color.PURPLE)
-
         // Draw line in the player's direction
-        val playerDirPx = playerPosPx + (player.direction * 20.0).toVec2Int()
-        topDownCanvas.strokeLine(playerPosPx.x, playerPosPx.y, playerDirPx.x, playerDirPx.y, Color.BLACK)
+        val playerDirPx = playerLocalPosPx + (player.direction * 20.0).toVec2Int()
+        topDownCanvas.strokeLine(playerLocalPosPx.x,playerLocalPosPx.y, playerDirPx.x, playerDirPx.y, Color.BLACK)
 
         // Draw camera plane
         val playerPlaneEndPx = playerDirPx + (player.camPlane * 20.0).toVec2Int()
@@ -348,6 +360,22 @@ class Raycaster : Application() {
                         var floorX = player.position.x + firstRayDir.x * rowDistance
                         var floorY = player.position.y + firstRayDir.y * rowDistance
 
+                        val ceilScreenY = (FPV_ASPECT_HEIGHT_PX - screenY - 1)
+
+                        // Stop and draw black line if out of flashlight
+                        if (ENABLE_FLASHLIGHT_FOG && FLASHLIGHT_PENETRATION_BLOCKS < rowDistance) {
+                            firstPersonCanvas.bufferRect(
+                                0, screenY * FPV_SCALE,
+                                FPV_WIDTH_PX, FPV_SCALE, Color.BLACK
+                            )
+
+                            firstPersonCanvas.bufferRect(
+                                0, ceilScreenY * FPV_SCALE,
+                                FPV_WIDTH_PX, FPV_SCALE, Color.BLACK
+                            )
+                            continue
+                        }
+
                         for (screenX in 0 until FPV_ASPECT_WIDTH_PX) {
                             val cellX = floorX.toInt()
                             val cellY = floorY.toInt()
@@ -360,8 +388,6 @@ class Raycaster : Application() {
 
                             var floorColor = Map.floorTexture.image.pixelReader.getColor(textureX, textureY)
                             var ceilColor = Map.ceilingTexture.image.pixelReader.getColor(textureX, textureY)
-
-                            val ceilScreenY = (FPV_ASPECT_HEIGHT_PX - screenY - 1)
 
                             if (ENABLE_FLASHLIGHT) {
                                 floorColor = applyFlashlight(floorColor, screenX, screenY, rowDistance)
@@ -475,6 +501,17 @@ class Raycaster : Application() {
                     val drawStart = maxOf(FPV_ASPECT_HEIGHT_PX / 2 - lineHeight / 2, 0)
                     val drawEnd = minOf(FPV_ASPECT_HEIGHT_PX / 2 + lineHeight / 2, FPV_ASPECT_HEIGHT_PX - 1)
 
+                    // Stop and draw black line if out of flashlight
+                    if (ENABLE_FLASHLIGHT_FOG && FLASHLIGHT_PENETRATION_BLOCKS < perpWallDist) {
+                        firstPersonCanvas.bufferRect(screenX * FPV_SCALE, drawStart * FPV_SCALE, FPV_SCALE, (drawEnd - drawStart) * FPV_SCALE, Color.BLACK)
+                        // Add black ray for debug rendering later
+                        player.debugRays.add(Ray(
+                            rayDir * perpWallDist,
+                            -1
+                        ))
+                        continue
+                    }
+
                     if (USE_TEXTURES) {
                         val textureReader = map.map[rayMapPos.y][rayMapPos.x].texture.image.pixelReader
 
@@ -526,7 +563,7 @@ class Raycaster : Application() {
 
                     // Add rays for debug rendering later
                     player.debugRays.add(Ray(
-                        player.position + rayDir * perpWallDist,
+                        rayDir * perpWallDist,
                         screenX
                     ))
                 }
