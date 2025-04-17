@@ -3,18 +3,16 @@ package edu.cwru.raycaster
 import javafx.application.Application
 import javafx.scene.Scene
 import javafx.scene.control.Label
-import javafx.scene.image.PixelFormat
 import javafx.scene.input.KeyCode
 import javafx.scene.layout.HBox
 import javafx.scene.layout.VBox
 import javafx.scene.paint.Color
 import javafx.stage.Stage
 import kotlinx.coroutines.*
-import java.nio.ByteBuffer
 import kotlin.math.PI
 import kotlin.math.floor
 
-const val NS_IN_S = 1_000_000_000.0
+const val MS_IN_S = 1000.0
 
 const val TEXTURE_WIDTH = 64
 const val TEXTURE_HEIGHT = 64
@@ -159,7 +157,7 @@ class Raycaster : Application() {
                 val now = System.currentTimeMillis()
 
                 // Time delta from previous frame in seconds; multiply rates by this to deal with variable FPS
-                val deltaSec = (now - prevFrameTime) / 1000.0
+                val deltaSec = (now - prevFrameTime) / MS_IN_S
                 // Instantaneous frame rate
                 val frameRate = 1.0 / deltaSec
 
@@ -188,16 +186,17 @@ class Raycaster : Application() {
                     time1 = time2
                 }
 
-                updateFPVBuffer()
+                bufferFloorCeil()
+                bufferWalls()
                 if (LOG_PERFORMANCE_METRICS) {
                     time2 = System.currentTimeMillis()
                     println("FPV buffer update used: ${time2 - time1}")
                     time1 = time2
                 }
 
-                launch(Dispatchers.Main) {
+                withContext(Dispatchers.Main) {
                     firstPersonCanvas.flushBuffer()
-                }.join()
+                }
                 if (LOG_PERFORMANCE_METRICS) {
                     time2 = System.currentTimeMillis()
                     println("FPV buffer draw used: ${time2 - time1}")
@@ -297,27 +296,27 @@ class Raycaster : Application() {
         topDownCanvas.strokeLine(playerPlaneStartPx.x, playerPlaneStartPx.y, playerPlaneEndPx.x, playerPlaneEndPx.y, Color.BLACK)
     }
 
-    private suspend fun updateFPVBuffer() = coroutineScope {
-        player.debugRays.clear()
+    private val FPV_HALF_HEIGHT_PX_DOUBLE = FPV_ASPECT_HEIGHT_PX.toDouble() / 2.0
+    private val FPV_HALF_HEIGHT_PX = FPV_HALF_HEIGHT_PX_DOUBLE.toInt()
+    private val FPV_INVERSE_WIDTH_PX = 1.0 / FPV_ASPECT_WIDTH_PX
+    private val MAX_TEXTURE_X = TEXTURE_WIDTH - 1
+    private val MAX_TEXTURE_Y = TEXTURE_HEIGHT - 1
 
-        // Draw sky and floor
+    // + 1 so last stripe may be smaller than others
+    private val FLOOR_CEIL_STRIPE_SIZE = FPV_HALF_HEIGHT_PX / CPU_CORES_AVAILABLE + 1
+    private val WALL_STRIPE_SIZE = FPV_ASPECT_WIDTH_PX / CPU_CORES_AVAILABLE + 1
+
+    private suspend fun bufferFloorCeil() = coroutineScope {
         if (USE_TEXTURES) {
             val firstRayDir = player.direction - player.camPlane
             val lastRayDir = player.direction + player.camPlane
-            val posZ = 0.5 * FPV_ASPECT_HEIGHT_PX.toDouble()
-            val halfHeight = FPV_ASPECT_HEIGHT_PX / 2
-            val invWidth = 1.0 / FPV_ASPECT_WIDTH_PX
-            val maxTextureX = TEXTURE_WIDTH - 1
-            val maxTextureY = TEXTURE_HEIGHT - 1
 
-            val floorStripeSize = halfHeight / CPU_CORES_AVAILABLE + 1  // Last stripe may be smaller than others
-
-            val floorStripeJobs = (halfHeight until FPV_ASPECT_HEIGHT_PX step floorStripeSize).map { stripeStart ->
+            val floorStripeJobs = (FPV_HALF_HEIGHT_PX until FPV_ASPECT_HEIGHT_PX step FLOOR_CEIL_STRIPE_SIZE).map { stripeStart ->
                 launch(Dispatchers.Default) {
-                    for (screenY in stripeStart until minOf(stripeStart + floorStripeSize, FPV_ASPECT_HEIGHT_PX)) {
-                        val centeredScreenY = screenY - halfHeight
-                        val rowDistance = posZ / centeredScreenY.toDouble()
-                        val floorStep = (lastRayDir - firstRayDir) * (rowDistance * invWidth)
+                    for (screenY in stripeStart until minOf(stripeStart + FLOOR_CEIL_STRIPE_SIZE, FPV_ASPECT_HEIGHT_PX)) {
+                        val centeredScreenY = screenY - FPV_HALF_HEIGHT_PX
+                        val rowDistance = FPV_HALF_HEIGHT_PX_DOUBLE / centeredScreenY.toDouble()
+                        val floorStep = (lastRayDir - firstRayDir) * (rowDistance * FPV_INVERSE_WIDTH_PX)
                         var floorX = player.position.x + firstRayDir.x * rowDistance
                         var floorY = player.position.y + firstRayDir.y * rowDistance
 
@@ -328,8 +327,8 @@ class Raycaster : Application() {
                             val fracX = floorX - cellX
                             val fracY = floorY - cellY
 
-                            val textureX = ((TEXTURE_WIDTH * fracX).toInt()).coerceIn(0, maxTextureX)
-                            val textureY = ((TEXTURE_HEIGHT * fracY).toInt()).coerceIn(0, maxTextureY)
+                            val textureX = ((TEXTURE_WIDTH * fracX).toInt()).coerceIn(0, MAX_TEXTURE_X)
+                            val textureY = ((TEXTURE_HEIGHT * fracY).toInt()).coerceIn(0, MAX_TEXTURE_Y)
 
                             val floorColor = FLOOR_TEXTURE.image.pixelReader.getColor(textureX, textureY)
                             val ceilColor = SKY_TEXTURE.image.pixelReader.getColor(textureX, textureY)
@@ -357,13 +356,14 @@ class Raycaster : Application() {
             firstPersonCanvas.bufferRect(0, 0, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, SKY_COLOR)
             firstPersonCanvas.bufferRect(0, FPV_HEIGHT_PX / 2, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, FLOOR_COLOR)
         }
+    }
 
-        // Draw walls
-        val wallStripeSize = FPV_ASPECT_WIDTH_PX / CPU_CORES_AVAILABLE + 1  // Last stripe may be smaller than others
+    private suspend fun bufferWalls() = coroutineScope {
+        player.debugRays.clear()
 
-        val wallStripeJobs = (0 until FPV_ASPECT_WIDTH_PX step wallStripeSize).map { stripeStart ->
+        val wallStripeJobs = (0 until FPV_ASPECT_WIDTH_PX step WALL_STRIPE_SIZE).map { stripeStart ->
             launch(Dispatchers.Default) {
-                for (screenX in stripeStart until minOf(stripeStart + wallStripeSize, FPV_ASPECT_WIDTH_PX)) {
+                for (screenX in stripeStart until minOf(stripeStart + WALL_STRIPE_SIZE, FPV_ASPECT_WIDTH_PX)) {
                     val cameraX = 2 * screenX.toDouble() / FPV_ASPECT_WIDTH_PX - 1
 
                     val rayDir = player.direction + player.camPlane * cameraX
@@ -378,14 +378,16 @@ class Raycaster : Application() {
                     if (rayDir.x < 0) {
                         step.x = -1
                         sideDist.x = (player.position.x - rayMapPos.x) * deltaDist.x
-                    } else {
+                    }
+                    else {
                         step.x = 1
                         sideDist.x = (-player.position.x + rayMapPos.x + 1.0) * deltaDist.x
                     }
                     if (rayDir.y < 0) {
                         step.y = -1
                         sideDist.y = (player.position.y - rayMapPos.y) * deltaDist.y
-                    } else {
+                    }
+                    else {
                         step.y = 1
                         sideDist.y = (-player.position.y + rayMapPos.y + 1.0) * deltaDist.y
                     }
@@ -444,7 +446,8 @@ class Raycaster : Application() {
 
                             firstPersonCanvas.bufferRect(screenX * FPV_SCALE, y * FPV_SCALE, FPV_SCALE, FPV_SCALE, color)
                         }
-                    } else {
+                    }
+                    else {
                         var color = MAP[rayMapPos.y][rayMapPos.x].color
 
                         if (hitSide == WallType.NorthSouth) {
@@ -453,10 +456,8 @@ class Raycaster : Application() {
 
                         // lineHeight is not clamped, so use drawEnd - drawStart to find real height
                         firstPersonCanvas.bufferRect(
-                            screenX * FPV_SCALE,
-                            drawStart * FPV_SCALE,
-                            1 * FPV_SCALE,
-                            (drawEnd - drawStart) * FPV_SCALE,
+                            screenX * FPV_SCALE, drawStart * FPV_SCALE,
+                            1 * FPV_SCALE, (drawEnd - drawStart) * FPV_SCALE,
                             color
                         )
                     }
