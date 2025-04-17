@@ -53,49 +53,6 @@ val ROTATION_KEY_SIGNS = mapOf(
     KeyCode.Q to -1.0,
 )
 
-// Must manually type to get correct nullability from Java Color class
-val SKY_COLOR: Color = Color.LIGHTBLUE
-val FLOOR_COLOR: Color = Color.LIGHTGRAY
-val SKY_TEXTURE = Texture.WOOD
-val FLOOR_TEXTURE = Texture.GREY_STONE
-
-data class Block(val color: Color,
-                 val texture: Texture,
-                 val passable: Boolean = false) {
-    companion object {
-        private val CHAR_TO_BLOCK = mapOf(
-            ' ' to Block(Color.WHITE, FLOOR_TEXTURE, true),
-            'B' to Block(Color.BLUE, Texture.BLUE_BRICK),
-            'G' to Block(Color.GREEN, Texture.WOOD),
-            'O' to Block(Color.ORANGE, Texture.EAGLE),
-        ).withDefault { Block(Color.PURPLE, Texture.PURPLE_STONE) }
-
-        fun fromChar(c: Char) = CHAR_TO_BLOCK.getValue(c)
-    }
-}
-
-fun stringToBlockMap(str: String): Array<Array<Block>> {
-    val lines = str.split('\n')
-    return Array(lines.size) { y ->
-        Array(lines[y].length) { x ->
-            Block.fromChar(lines[y][x])
-        }
-    }
-}
-
-private val MAP = stringToBlockMap("""
-    BBBBBB
-    G    B
-    B  B B
-    O    B
-    BBBBBB
-""".trimIndent())
-
-val MAP_WIDTH_BLOCKS = MAP[0].size
-val MAP_HEIGHT_BLOCKS = MAP.size
-val MAP_WIDTH_PX = MAP_WIDTH_BLOCKS * PX_PER_BLOCK
-val MAP_HEIGHT_PX = MAP_HEIGHT_BLOCKS * PX_PER_BLOCK
-
 const val FPV_ASPECT_WIDTH_PX = 800
 const val FPV_ASPECT_HEIGHT_PX = 400
 val FPV_ASPECT_CENTER = Vec2Int(FPV_ASPECT_WIDTH_PX / 2, FPV_ASPECT_HEIGHT_PX / 2)
@@ -104,6 +61,18 @@ const val FPV_WIDTH_PX = FPV_ASPECT_WIDTH_PX * FPV_SCALE
 const val FPV_HEIGHT_PX = FPV_ASPECT_HEIGHT_PX * FPV_SCALE
 
 const val LOG_PERFORMANCE_METRICS = false
+
+// Raycasting constants so we don't have to recompute them over and over
+const val FPV_HALF_HEIGHT_PX_DOUBLE = FPV_ASPECT_HEIGHT_PX.toDouble() / 2.0
+const val FPV_HALF_HEIGHT_PX = FPV_HALF_HEIGHT_PX_DOUBLE.toInt()
+const val FPV_INVERSE_WIDTH_PX = 1.0 / FPV_ASPECT_WIDTH_PX
+const val MAX_TEXTURE_X = TEXTURE_WIDTH - 1
+const val MAX_TEXTURE_Y = TEXTURE_HEIGHT - 1
+
+// Raycasting multithreading stripe sizes
+// + 1 so last stripe may be smaller than others
+val FLOOR_CEIL_STRIPE_SIZE = FPV_HALF_HEIGHT_PX / CPU_CORES_AVAILABLE + 1
+val WALL_STRIPE_SIZE = FPV_ASPECT_WIDTH_PX / CPU_CORES_AVAILABLE + 1
 
 fun Double.format(scale: Int) = "%.${scale}f".format(this)
 
@@ -139,7 +108,8 @@ class Raycaster : Application() {
 
     private var prevFrameTime = 0L
     private val player = Player()
-    private val topDownCanvas = ContextualCanvas(MAP_WIDTH_PX, MAP_HEIGHT_PX)
+    private val map = Map()
+    private val topDownCanvas = ContextualCanvas(map.mapWidthPx, map.mapHeightPx)
     private val firstPersonCanvas = ContextualCanvas(FPV_WIDTH_PX, FPV_HEIGHT_PX)
     private val frameRateLabel = Label("No FPS data")
 
@@ -161,7 +131,7 @@ class Raycaster : Application() {
         viewBox.children.add(topDownCanvas)
         viewBox.children.add(firstPersonCanvas)
 
-        primaryStage.scene = Scene(root, MAP_WIDTH_PX + FPV_WIDTH_PX + 10.0, FPV_HEIGHT_PX + 50.0)
+        primaryStage.scene = Scene(root, map.mapWidthPx + FPV_WIDTH_PX + 10.0, FPV_HEIGHT_PX + 50.0)
 
         primaryStage.scene.setOnKeyPressed {
             if (it.code in keyMap.keys) {
@@ -273,10 +243,10 @@ class Raycaster : Application() {
                     val bottomRight = newPos + PLAYER_RADIUS_BLOCKS
 
                     // TODO: Snap to wall if you would clip it to avoid gaps
-                    if (MAP[topLeft.y.toInt()][topLeft.x.toInt()].passable and
-                        MAP[topLeft.y.toInt()][bottomRight.x.toInt()].passable and
-                        MAP[bottomRight.y.toInt()][topLeft.x.toInt()].passable and
-                        MAP[bottomRight.y.toInt()][bottomRight.x.toInt()].passable
+                    if (map.map[topLeft.y.toInt()][topLeft.x.toInt()].passable and
+                        map.map[topLeft.y.toInt()][bottomRight.x.toInt()].passable and
+                        map.map[bottomRight.y.toInt()][topLeft.x.toInt()].passable and
+                        map.map[bottomRight.y.toInt()][bottomRight.x.toInt()].passable
                     ) {
                         player.position = MutableVec2Double(newPos)
                     }
@@ -286,13 +256,13 @@ class Raycaster : Application() {
 
         // Don't leave the map
         player.position.clamp(
-            PLAYER_RADIUS_BLOCKS, MAP_WIDTH_BLOCKS - PLAYER_RADIUS_BLOCKS,
-            PLAYER_RADIUS_BLOCKS, MAP_HEIGHT_BLOCKS - PLAYER_RADIUS_BLOCKS
+            PLAYER_RADIUS_BLOCKS, map.mapWidthBlocks - PLAYER_RADIUS_BLOCKS,
+            PLAYER_RADIUS_BLOCKS, map.mapHeightBlocks - PLAYER_RADIUS_BLOCKS
         )
     }
 
     private fun drawTopDownMap() {
-        for ((y, row) in MAP.withIndex()) {
+        for ((y, row) in map.map.withIndex()) {
             for ((x, block) in row.withIndex()) {
                 val xLocation = x * PX_PER_BLOCK
                 val yLocation = y * PX_PER_BLOCK
@@ -346,16 +316,6 @@ class Raycaster : Application() {
         topDownCanvas.strokeLine(playerPlaneStartPx.x, playerPlaneStartPx.y, playerPlaneEndPx.x, playerPlaneEndPx.y, Color.BLACK)
     }
 
-    private val FPV_HALF_HEIGHT_PX_DOUBLE = FPV_ASPECT_HEIGHT_PX.toDouble() / 2.0
-    private val FPV_HALF_HEIGHT_PX = FPV_HALF_HEIGHT_PX_DOUBLE.toInt()
-    private val FPV_INVERSE_WIDTH_PX = 1.0 / FPV_ASPECT_WIDTH_PX
-    private val MAX_TEXTURE_X = TEXTURE_WIDTH - 1
-    private val MAX_TEXTURE_Y = TEXTURE_HEIGHT - 1
-
-    // + 1 so last stripe may be smaller than others
-    private val FLOOR_CEIL_STRIPE_SIZE = FPV_HALF_HEIGHT_PX / CPU_CORES_AVAILABLE + 1
-    private val WALL_STRIPE_SIZE = FPV_ASPECT_WIDTH_PX / CPU_CORES_AVAILABLE + 1
-
     private suspend fun bufferFloorCeil() = coroutineScope {
         if (USE_TEXTURES) {
             val firstRayDir = player.direction - player.camPlane
@@ -380,8 +340,8 @@ class Raycaster : Application() {
                             val textureX = ((TEXTURE_WIDTH * fracX).toInt()).coerceIn(0, MAX_TEXTURE_X)
                             val textureY = ((TEXTURE_HEIGHT * fracY).toInt()).coerceIn(0, MAX_TEXTURE_Y)
 
-                            var floorColor = FLOOR_TEXTURE.image.pixelReader.getColor(textureX, textureY)
-                            var ceilColor = SKY_TEXTURE.image.pixelReader.getColor(textureX, textureY)
+                            var floorColor = Map.floorTexture.image.pixelReader.getColor(textureX, textureY)
+                            var ceilColor = Map.ceilingTexture.image.pixelReader.getColor(textureX, textureY)
 
                             val ceilScreenY = (FPV_ASPECT_HEIGHT_PX - screenY - 1)
 
@@ -410,8 +370,8 @@ class Raycaster : Application() {
             floorStripeJobs.joinAll()
         }
         else {
-            firstPersonCanvas.bufferRect(0, 0, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, SKY_COLOR)
-            firstPersonCanvas.bufferRect(0, FPV_HEIGHT_PX / 2, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, FLOOR_COLOR)
+            firstPersonCanvas.bufferRect(0, 0, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, Map.ceilingColor)
+            firstPersonCanvas.bufferRect(0, FPV_HEIGHT_PX / 2, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, Map.floorColor)
         }
     }
 
@@ -483,7 +443,7 @@ class Raycaster : Application() {
 
                         // Assumes only impassable tiles are walls
                         // Will cause errors if map is not surrounded by walls
-                        if (!MAP[rayMapPos.y][rayMapPos.x].passable) {
+                        if (!map.map[rayMapPos.y][rayMapPos.x].passable) {
                             hitWall = true
                         }
                     }
@@ -497,7 +457,7 @@ class Raycaster : Application() {
                     val drawEnd = minOf(FPV_ASPECT_HEIGHT_PX / 2 + lineHeight / 2, FPV_ASPECT_HEIGHT_PX - 1)
 
                     if (USE_TEXTURES) {
-                        val textureReader = MAP[rayMapPos.y][rayMapPos.x].texture.image.pixelReader
+                        val textureReader = map.map[rayMapPos.y][rayMapPos.x].texture.image.pixelReader
 
                         var wallX =
                             if (hitSide == WallType.EastWest) player.position.y + perpWallDist * rayDir.y
@@ -531,7 +491,7 @@ class Raycaster : Application() {
                         }
                     }
                     else {
-                        var color = MAP[rayMapPos.y][rayMapPos.x].color
+                        var color = map.map[rayMapPos.y][rayMapPos.x].color
 
                         if (hitSide == WallType.NorthSouth) {
                             color = color.darker()
