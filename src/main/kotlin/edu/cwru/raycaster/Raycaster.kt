@@ -30,6 +30,13 @@ const val PLAYER_RADIUS_PX = (PLAYER_RADIUS_BLOCKS * PX_PER_BLOCK).toInt()
 
 val CPU_CORES_AVAILABLE = Runtime.getRuntime().availableProcessors()
 
+const val FLASHLIGHT_PENETRATION_BLOCKS = 2.0 // After this nothing is visible
+const val ENABLE_FLASHLIGHT_FOG = true
+const val ENABLE_FLASHLIGHT_VIGNETTE = false
+const val ENABLE_FLASHLIGHT = ENABLE_FLASHLIGHT_FOG || ENABLE_FLASHLIGHT_VIGNETTE
+const val FLASHLIGHT_VIGNETTE_STEEPNESS = 10.0
+const val FLASHLIGHT_VIGNETTE_RADIUS = 0.5
+
 val STRAFE_KEY_ANGLES = mapOf(
     KeyCode.W     to 0.0,
     KeyCode.UP    to 0.0,
@@ -91,6 +98,7 @@ val MAP_HEIGHT_PX = MAP_HEIGHT_BLOCKS * PX_PER_BLOCK
 
 const val FPV_ASPECT_WIDTH_PX = 800
 const val FPV_ASPECT_HEIGHT_PX = 400
+val FPV_ASPECT_CENTER = Vec2Int(FPV_ASPECT_WIDTH_PX / 2, FPV_ASPECT_HEIGHT_PX / 2)
 const val FPV_SCALE = 1
 const val FPV_WIDTH_PX = FPV_ASPECT_WIDTH_PX * FPV_SCALE
 const val FPV_HEIGHT_PX = FPV_ASPECT_HEIGHT_PX * FPV_SCALE
@@ -372,8 +380,15 @@ class Raycaster : Application() {
                             val textureX = ((TEXTURE_WIDTH * fracX).toInt()).coerceIn(0, MAX_TEXTURE_X)
                             val textureY = ((TEXTURE_HEIGHT * fracY).toInt()).coerceIn(0, MAX_TEXTURE_Y)
 
-                            val floorColor = FLOOR_TEXTURE.image.pixelReader.getColor(textureX, textureY)
-                            val ceilColor = SKY_TEXTURE.image.pixelReader.getColor(textureX, textureY)
+                            var floorColor = FLOOR_TEXTURE.image.pixelReader.getColor(textureX, textureY)
+                            var ceilColor = SKY_TEXTURE.image.pixelReader.getColor(textureX, textureY)
+
+                            val ceilScreenY = (FPV_ASPECT_HEIGHT_PX - screenY - 1)
+
+                            if (ENABLE_FLASHLIGHT) {
+                                floorColor = applyFlashlight(floorColor, screenX, screenY, rowDistance)
+                                ceilColor = applyFlashlight(ceilColor, screenX, ceilScreenY, rowDistance)
+                            }
 
                             firstPersonCanvas.bufferRect(
                                 screenX * FPV_SCALE, screenY * FPV_SCALE,
@@ -381,7 +396,7 @@ class Raycaster : Application() {
                             )
 
                             firstPersonCanvas.bufferRect(
-                                screenX * FPV_SCALE, (FPV_ASPECT_HEIGHT_PX - screenY - 1) * FPV_SCALE,
+                                screenX * FPV_SCALE, ceilScreenY * FPV_SCALE,
                                 FPV_SCALE, FPV_SCALE, ceilColor
                             )
 
@@ -398,6 +413,27 @@ class Raycaster : Application() {
             firstPersonCanvas.bufferRect(0, 0, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, SKY_COLOR)
             firstPersonCanvas.bufferRect(0, FPV_HEIGHT_PX / 2, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, FLOOR_COLOR)
         }
+    }
+
+    fun applyFlashlight(color: Color, screenX: Int, screenY: Int, distance: Double): Color {
+        // Shortcut to skip calculations if we're completely out of range
+        if (ENABLE_FLASHLIGHT_FOG && FLASHLIGHT_PENETRATION_BLOCKS < distance) {
+            return Color.BLACK
+        }
+
+        val fogCoefficient =
+            if (ENABLE_FLASHLIGHT_FOG) maxOf(1.0 - distance / FLASHLIGHT_PENETRATION_BLOCKS, 0.0)
+            else 1.0
+
+        var vignetteCoefficient = 1.0
+        if (ENABLE_FLASHLIGHT_VIGNETTE) {
+            val screenPos = Vec2Int(screenX, screenY) - FPV_ASPECT_CENTER
+            val normDistFromCenter = screenPos.magnitude / FPV_ASPECT_CENTER.magnitude
+            vignetteCoefficient = (-0.5 * (FLASHLIGHT_VIGNETTE_STEEPNESS *
+                    (normDistFromCenter - FLASHLIGHT_VIGNETTE_RADIUS)) + 0.5).coerceIn(0.0, 1.0)
+        }
+
+        return color.deriveColor(0.0, 1.0, fogCoefficient * vignetteCoefficient, 1.0)
     }
 
     private suspend fun bufferWalls() = coroutineScope {
@@ -481,8 +517,13 @@ class Raycaster : Application() {
                         for (y in drawStart until drawEnd) {
                             val texY = minOf(texPos.toInt(), TEXTURE_HEIGHT - 1)
                             texPos += step
+
                             var color = textureReader.getColor(texX, texY)
-                            if (hitSide == WallType.NorthSouth) {
+
+                            if (ENABLE_FLASHLIGHT) {
+                                color = applyFlashlight(color, screenX, y, perpWallDist)
+                            }
+                            else if (hitSide == WallType.NorthSouth) {
                                 color = color.darker()
                             }
 
