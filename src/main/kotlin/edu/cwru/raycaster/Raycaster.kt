@@ -29,14 +29,14 @@ const val PX_PER_BLOCK = TEXTURE_WIDTH
 const val USE_MOUSE_INPUT = false
 const val PLAYER_MOVE_RATE = 3.0  // blocks / sec
 const val PLAYER_KEYBOARD_TURN_RATE = PI   // radians / sec
-const val PLAYER_MOUSE_TURN_RATE = PI / 4   // radians / sec
+const val PLAYER_MOUSE_TURN_RATE = PI / 4  // radians / sec
 
 const val PLAYER_RADIUS_BLOCKS = 0.1
 const val PLAYER_RADIUS_PX = (PLAYER_RADIUS_BLOCKS * PX_PER_BLOCK).toInt()
 
 const val ENABLE_FLASHLIGHT_FOG = true
 const val ENABLE_FLASHLIGHT_VIGNETTE = false
-const val FLASHLIGHT_PENETRATION_BLOCKS = 2.0 // After this nothing is visible
+const val FLASHLIGHT_PENETRATION_BLOCKS = 3.0  // After this nothing is visible
 const val ENABLE_FLASHLIGHT = ENABLE_FLASHLIGHT_FOG || ENABLE_FLASHLIGHT_VIGNETTE
 const val FLASHLIGHT_VIGNETTE_STEEPNESS = 10.0
 const val FLASHLIGHT_VIGNETTE_RADIUS = 0.5
@@ -86,9 +86,7 @@ val ROTATION_KEY_SIGNS = mapOf(
     KeyCode.Q to -1.0,
 )
 
-data class Ray(val end: Vec2Double, val index: Int) {
-    val endBlock = end.toVec2Int()
-}
+data class Ray(val end: Vec2Double, val index: Int)
 
 enum class WallType {
     NorthSouth, EastWest
