@@ -20,12 +20,13 @@ const val TEXTURE_WIDTH = 64
 const val TEXTURE_HEIGHT = 64
 
 const val PX_PER_BLOCK = TEXTURE_WIDTH
-const val BLOCKS_PER_PX = 1.0 / PX_PER_BLOCK.toDouble()
 
 const val PLAYER_MOVE_RATE = 3.0  // blocks / sec
 const val PLAYER_ANGULAR_VELOCITY = PI   // radians / sec
 const val PLAYER_RADIUS_BLOCKS = 0.1
 const val PLAYER_RADIUS_PX = (PLAYER_RADIUS_BLOCKS * PX_PER_BLOCK).toInt()
+
+val CPU_CORES_AVAILABLE = Runtime.getRuntime().availableProcessors()
 
 val STRAFE_KEY_ANGLES = mapOf(
     KeyCode.W     to 0.0,
@@ -48,22 +49,6 @@ val SKY_COLOR: Color = Color.LIGHTBLUE
 val FLOOR_COLOR: Color = Color.LIGHTGRAY
 val SKY_TEXTURE = Texture.WOOD
 val FLOOR_TEXTURE = Texture.GREY_STONE
-
-fun ByteArray.writePixel(x: Int, y: Int, color: Color) {
-    val pxIndex = (y * FPV_WIDTH_PX + x) * FPV_BYTES_PER_PX
-    this[pxIndex] = (color.blue * 255.0).toInt().toByte()
-    this[pxIndex + 1] = (color.green * 255.0).toInt().toByte()
-    this[pxIndex + 2] = (color.red * 255.0).toInt().toByte()
-    this[pxIndex + 3] = (color.opacity * 255.0).toInt().toByte()
-}
-
-fun ByteArray.fillRect(x: Int, y: Int, w: Int, h: Int, color: Color) {
-    for (xIdx in x until x + w) {
-        for (yIdx in y until y + h) {
-            writePixel(xIdx, yIdx, color)
-        }
-    }
-}
 
 data class Block(val color: Color,
                  val texture: Texture,
@@ -104,7 +89,6 @@ val MAP_HEIGHT_PX = MAP_HEIGHT_BLOCKS * PX_PER_BLOCK
 
 const val FPV_ASPECT_WIDTH_PX = 800
 const val FPV_ASPECT_HEIGHT_PX = 400
-const val FPV_BYTES_PER_PX = 4
 const val FPV_SCALE = 1
 const val FPV_WIDTH_PX = FPV_ASPECT_WIDTH_PX * FPV_SCALE
 const val FPV_HEIGHT_PX = FPV_ASPECT_HEIGHT_PX * FPV_SCALE
@@ -113,10 +97,18 @@ const val LOG_PERFORMANCE_METRICS = false
 
 fun Double.format(scale: Int) = "%.${scale}f".format(this)
 
+data class Ray(val end: Vec2Double, val index: Int) {
+    val endBlock = end.toVec2Int()
+}
+
 class Player {
     var position = MutableVec2Double(2.0, 2.0)
     var direction = MutableVec2Double(-1.0, 0.0)
     var camPlane = MutableVec2Double(direction.rotate(PI / 2))
+    val debugRays = mutableListOf<Ray>()
+
+    val positionPx: Vec2Int
+        get() = (position * PX_PER_BLOCK.toDouble()).toVec2Int()
 }
 
 enum class WallType {
@@ -134,10 +126,6 @@ class Raycaster : Application() {
     private val topDownCanvas = ContextualCanvas(MAP_WIDTH_PX, MAP_HEIGHT_PX)
     private val firstPersonCanvas = ContextualCanvas(FPV_WIDTH_PX, FPV_HEIGHT_PX)
     private val frameRateLabel = Label("No FPS data")
-
-    // TODO: Consider using a Buffer instead of an Array (and adding pixels horizontally) for performance
-    private val FPVBuffer = ByteArray(FPV_WIDTH_PX * FPV_HEIGHT_PX * FPV_BYTES_PER_PX)
-    private val FPVPixelFormat: PixelFormat<ByteBuffer> = PixelFormat.getByteBgraPreInstance()
 
     override fun start(primaryStage: Stage) {
         primaryStage.title = "Kotlin Raycaster"
@@ -207,10 +195,9 @@ class Raycaster : Application() {
                     time1 = time2
                 }
 
-                val job = launch(Dispatchers.Main) {
-                    drawFPVBuffer()
-                }
-                job.join()
+                launch(Dispatchers.Main) {
+                    firstPersonCanvas.flushBuffer()
+                }.join()
                 if (LOG_PERFORMANCE_METRICS) {
                     time2 = System.currentTimeMillis()
                     println("FPV buffer draw used: ${time2 - time1}")
@@ -218,11 +205,6 @@ class Raycaster : Application() {
                 }
             }
         }
-    }
-
-    private fun drawFPVBuffer() {
-        firstPersonCanvas.writePixels(0, 0, FPV_WIDTH_PX, FPV_HEIGHT_PX, FPVPixelFormat, FPVBuffer,
-            0, FPV_WIDTH_PX * FPV_BYTES_PER_PX)
     }
 
     private fun updateState(deltaSec: Double) {
@@ -286,12 +268,26 @@ class Raycaster : Application() {
             Color.RED
         )
 
+        val playerPosPx = player.positionPx
+
+        for (ray in player.debugRays) {
+            // Tag the blocks the rays hit
+            topDownCanvas.fillRect(ray.endBlock.x * PX_PER_BLOCK, ray.endBlock.y * PX_PER_BLOCK, 10, 10, Color.GREEN)
+
+            // Draw lines for rays
+            val rayDirPx = (ray.end * PX_PER_BLOCK.toDouble()).toVec2Int()
+            topDownCanvas.strokeLine(
+                playerPosPx.x, playerPosPx.y,
+                rayDirPx.x, rayDirPx.y,
+                Color.rgb(255, 0, (255.0 * (ray.index / FPV_WIDTH_PX.toDouble())).toInt())
+            )
+        }
+
         // Tag the block the player is in
         val playerBlock = player.position.toVec2Int()
         topDownCanvas.fillRect(playerBlock.x * PX_PER_BLOCK, playerBlock.y * PX_PER_BLOCK, 10, 10, Color.PURPLE)
 
         // Draw line in the player's direction
-        val playerPosPx = (player.position * PX_PER_BLOCK.toDouble()).toVec2Int()
         val playerDirPx = playerPosPx + (player.direction * 20.0).toVec2Int()
         topDownCanvas.strokeLine(playerPosPx.x, playerPosPx.y, playerDirPx.x, playerDirPx.y, Color.BLACK)
 
@@ -302,9 +298,8 @@ class Raycaster : Application() {
     }
 
     private suspend fun updateFPVBuffer() = coroutineScope {
-        val numCores = 8
+        player.debugRays.clear()
 
-//        val playerPosPx = (player.position * PX_PER_BLOCK.toDouble()).toVec2Int()
         // Draw sky and floor
         if (USE_TEXTURES) {
             val firstRayDir = player.direction - player.camPlane
@@ -315,7 +310,7 @@ class Raycaster : Application() {
             val maxTextureX = TEXTURE_WIDTH - 1
             val maxTextureY = TEXTURE_HEIGHT - 1
 
-            val floorStripeSize = halfHeight / numCores + 1  // Last stripe may be smaller than others
+            val floorStripeSize = halfHeight / CPU_CORES_AVAILABLE + 1  // Last stripe may be smaller than others
 
             val floorStripeJobs = (halfHeight until FPV_ASPECT_HEIGHT_PX step floorStripeSize).map { stripeStart ->
                 launch(Dispatchers.Default) {
@@ -339,12 +334,12 @@ class Raycaster : Application() {
                             val floorColor = FLOOR_TEXTURE.image.pixelReader.getColor(textureX, textureY)
                             val ceilColor = SKY_TEXTURE.image.pixelReader.getColor(textureX, textureY)
 
-                            FPVBuffer.fillRect(
+                            firstPersonCanvas.bufferRect(
                                 screenX * FPV_SCALE, screenY * FPV_SCALE,
                                 FPV_SCALE, FPV_SCALE, floorColor
                             )
 
-                            FPVBuffer.fillRect(
+                            firstPersonCanvas.bufferRect(
                                 screenX * FPV_SCALE, (FPV_ASPECT_HEIGHT_PX - screenY - 1) * FPV_SCALE,
                                 FPV_SCALE, FPV_SCALE, ceilColor
                             )
@@ -359,12 +354,12 @@ class Raycaster : Application() {
             floorStripeJobs.joinAll()
         }
         else {
-            FPVBuffer.fillRect(0, 0, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, SKY_COLOR)
-            FPVBuffer.fillRect(0, FPV_HEIGHT_PX / 2, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, FLOOR_COLOR)
+            firstPersonCanvas.bufferRect(0, 0, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, SKY_COLOR)
+            firstPersonCanvas.bufferRect(0, FPV_HEIGHT_PX / 2, FPV_WIDTH_PX, FPV_HEIGHT_PX / 2, FLOOR_COLOR)
         }
 
         // Draw walls
-        val wallStripeSize = FPV_ASPECT_WIDTH_PX / numCores + 1  // Last stripe may be smaller than others
+        val wallStripeSize = FPV_ASPECT_WIDTH_PX / CPU_CORES_AVAILABLE + 1  // Last stripe may be smaller than others
 
         val wallStripeJobs = (0 until FPV_ASPECT_WIDTH_PX step wallStripeSize).map { stripeStart ->
             launch(Dispatchers.Default) {
@@ -447,7 +442,7 @@ class Raycaster : Application() {
                                 color = color.darker()
                             }
 
-                            FPVBuffer.fillRect(screenX * FPV_SCALE, y * FPV_SCALE, FPV_SCALE, FPV_SCALE, color)
+                            firstPersonCanvas.bufferRect(screenX * FPV_SCALE, y * FPV_SCALE, FPV_SCALE, FPV_SCALE, color)
                         }
                     } else {
                         var color = MAP[rayMapPos.y][rayMapPos.x].color
@@ -457,7 +452,7 @@ class Raycaster : Application() {
                         }
 
                         // lineHeight is not clamped, so use drawEnd - drawStart to find real height
-                        FPVBuffer.fillRect(
+                        firstPersonCanvas.bufferRect(
                             screenX * FPV_SCALE,
                             drawStart * FPV_SCALE,
                             1 * FPV_SCALE,
@@ -466,16 +461,11 @@ class Raycaster : Application() {
                         )
                     }
 
-                    //            // Tag the blocks the rays hit
-                    //            topDownCanvas.fillRect(rayMapPos.x * PX_PER_BLOCK, rayMapPos.y * PX_PER_BLOCK, 10, 10, Color.GREEN)
-                    //
-                    //            // Draw lines for rays
-                    //            val rayDirPx = playerPosPx + (rayDir * perpWallDist * PX_PER_BLOCK.toDouble()).toVec2Int()
-                    //            topDownCanvas.strokeLine(
-                    //                playerPosPx.x, playerPosPx.y,
-                    //                rayDirPx.x, rayDirPx.y,
-                    //                Color.rgb(255, 0, (255.0 * (screenX / FPV_WIDTH_PX.toDouble())).toInt())
-                    //            )
+                    // Add rays for debug rendering later
+                    player.debugRays.add(Ray(
+                        player.position + rayDir * perpWallDist,
+                        screenX
+                    ))
                 }
             }
         }
@@ -485,5 +475,6 @@ class Raycaster : Application() {
 }
 
 fun main() {
+    println("Running on $CPU_CORES_AVAILABLE CPU cores")
     Application.launch(Raycaster::class.java)
 }
