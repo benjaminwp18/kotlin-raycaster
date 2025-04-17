@@ -1,12 +1,14 @@
 package edu.cwru.raycaster
 
 import javafx.application.Application
+import javafx.scene.Cursor
 import javafx.scene.Scene
 import javafx.scene.control.Label
 import javafx.scene.input.KeyCode
 import javafx.scene.layout.HBox
 import javafx.scene.layout.VBox
 import javafx.scene.paint.Color
+import javafx.scene.robot.Robot
 import javafx.stage.Stage
 import kotlinx.coroutines.*
 import kotlin.math.PI
@@ -20,7 +22,9 @@ const val TEXTURE_HEIGHT = 64
 const val PX_PER_BLOCK = TEXTURE_WIDTH
 
 const val PLAYER_MOVE_RATE = 3.0  // blocks / sec
-const val PLAYER_ANGULAR_VELOCITY = PI   // radians / sec
+const val PLAYER_KEYBOARD_TURN_RATE = PI   // radians / sec
+const val PLAYER_MOUSE_TURN_RATE = PI / 4   // radians / sec
+const val USE_MOUSE_INPUT = false
 const val PLAYER_RADIUS_BLOCKS = 0.1
 const val PLAYER_RADIUS_PX = (PLAYER_RADIUS_BLOCKS * PX_PER_BLOCK).toInt()
 
@@ -107,6 +111,12 @@ class Player {
 
     val positionPx: Vec2Int
         get() = (position * PX_PER_BLOCK.toDouble()).toVec2Int()
+
+    fun rotate(angle: Double) {
+        val newDirection = direction.rotate(angle)
+        direction = MutableVec2Double(newDirection)
+        camPlane = MutableVec2Double(newDirection.rotate(PI / 2))
+    }
 }
 
 enum class WallType {
@@ -125,7 +135,14 @@ class Raycaster : Application() {
     private val firstPersonCanvas = ContextualCanvas(FPV_WIDTH_PX, FPV_HEIGHT_PX)
     private val frameRateLabel = Label("No FPS data")
 
-    override fun start(primaryStage: Stage) {
+    private var recenteringMouse = false
+    private var escaped = false
+    private val robot = Robot()
+
+    private lateinit var primaryStage: Stage
+
+    override fun start(stage: Stage) {
+        primaryStage = stage
         primaryStage.title = "Kotlin Raycaster"
 
         val root = VBox()
@@ -142,10 +159,30 @@ class Raycaster : Application() {
             if (it.code in keyMap.keys) {
                 keyMap[it.code] = true
             }
+            else if (it.code == KeyCode.ESCAPE) {
+                escaped = true
+            }
         }
         primaryStage.scene.setOnKeyReleased {
             if (it.code in keyMap.keys) {
                 keyMap[it.code] = false
+            }
+        }
+
+        if (USE_MOUSE_INPUT) {
+            primaryStage.scene.cursor = Cursor.NONE
+            centerMouse()
+            primaryStage.scene.setOnMouseMoved {
+                if (recenteringMouse || escaped) {
+                    recenteringMouse = false
+                    return@setOnMouseMoved
+                }
+
+                val normalizedDx = (it.screenX - (primaryStage.x + primaryStage.width / 2)) / (primaryStage.width / 2)
+                player.rotate(normalizedDx * PLAYER_MOUSE_TURN_RATE)
+
+                recenteringMouse = true
+                centerMouse()
             }
         }
 
@@ -177,26 +214,26 @@ class Raycaster : Application() {
                     time1 = time2
                 }
 
-                withContext(Dispatchers.Main) {
+                launch(Dispatchers.Main) {
                     drawTopDownMap()
-                }
+                }.join()
                 if (LOG_PERFORMANCE_METRICS) {
                     time2 = System.currentTimeMillis()
                     println("Top down draw used: ${time2 - time1}")
                     time1 = time2
                 }
 
-                bufferFloorCeil()
-                bufferWalls()
+                launch { bufferFloorCeil() }.join()
+                launch { bufferWalls() }.join()
                 if (LOG_PERFORMANCE_METRICS) {
                     time2 = System.currentTimeMillis()
                     println("FPV buffer update used: ${time2 - time1}")
                     time1 = time2
                 }
 
-                withContext(Dispatchers.Main) {
+                launch(Dispatchers.Main) {
                     firstPersonCanvas.flushBuffer()
-                }
+                }.join()
                 if (LOG_PERFORMANCE_METRICS) {
                     time2 = System.currentTimeMillis()
                     println("FPV buffer draw used: ${time2 - time1}")
@@ -206,14 +243,19 @@ class Raycaster : Application() {
         }
     }
 
+    private fun centerMouse() {
+        robot.mouseMove(
+            primaryStage.x + primaryStage.width / 2,
+            primaryStage.y + primaryStage.height / 2
+        )
+    }
+
     private fun updateState(deltaSec: Double) {
         // Don't walk through walls
         for ((key, pressed) in keyMap) {
             if (pressed) {
                 if (key in ROTATION_KEY_SIGNS) {
-                    val newDirection = player.direction.rotate(ROTATION_KEY_SIGNS.getValue(key) * PLAYER_ANGULAR_VELOCITY * deltaSec)
-                    player.direction = MutableVec2Double(newDirection)
-                    player.camPlane = MutableVec2Double(newDirection.rotate(PI / 2))
+                    player.rotate(ROTATION_KEY_SIGNS.getValue(key) * PLAYER_KEYBOARD_TURN_RATE * deltaSec)
                 }
                 else {
                     val direction = player.direction.rotate(STRAFE_KEY_ANGLES.getValue(key))
