@@ -14,28 +14,54 @@ import kotlinx.coroutines.*
 import kotlin.math.PI
 import kotlin.math.floor
 
+fun Double.format(scale: Int) = "%.${scale}f".format(this)
 const val MS_IN_S = 1000.0
 
+const val LOG_PERFORMANCE_METRICS = false
+
+const val USE_TEXTURES = true
 const val TEXTURE_WIDTH = 64
 const val TEXTURE_HEIGHT = 64
-
 const val PX_PER_BLOCK = TEXTURE_WIDTH
 
+const val USE_MOUSE_INPUT = false
 const val PLAYER_MOVE_RATE = 3.0  // blocks / sec
 const val PLAYER_KEYBOARD_TURN_RATE = PI   // radians / sec
 const val PLAYER_MOUSE_TURN_RATE = PI / 4   // radians / sec
-const val USE_MOUSE_INPUT = false
+
 const val PLAYER_RADIUS_BLOCKS = 0.1
 const val PLAYER_RADIUS_PX = (PLAYER_RADIUS_BLOCKS * PX_PER_BLOCK).toInt()
 
-val CPU_CORES_AVAILABLE = Runtime.getRuntime().availableProcessors()
-
-const val FLASHLIGHT_PENETRATION_BLOCKS = 2.0 // After this nothing is visible
 const val ENABLE_FLASHLIGHT_FOG = true
 const val ENABLE_FLASHLIGHT_VIGNETTE = false
+const val FLASHLIGHT_PENETRATION_BLOCKS = 2.0 // After this nothing is visible
 const val ENABLE_FLASHLIGHT = ENABLE_FLASHLIGHT_FOG || ENABLE_FLASHLIGHT_VIGNETTE
 const val FLASHLIGHT_VIGNETTE_STEEPNESS = 10.0
 const val FLASHLIGHT_VIGNETTE_RADIUS = 0.5
+
+// Size before scaling:
+const val FPV_ASPECT_WIDTH_PX = 800
+const val FPV_ASPECT_HEIGHT_PX = 400
+val FPV_ASPECT_CENTER = Vec2Int(FPV_ASPECT_WIDTH_PX / 2, FPV_ASPECT_HEIGHT_PX / 2)
+
+const val FPV_SCALE = 1
+
+// Real pixel size after scaling:
+const val FPV_WIDTH_PX = FPV_ASPECT_WIDTH_PX * FPV_SCALE
+const val FPV_HEIGHT_PX = FPV_ASPECT_HEIGHT_PX * FPV_SCALE
+
+// Raycasting constants so we don't have to recompute them over and over
+const val FPV_HALF_HEIGHT_PX_DOUBLE = FPV_ASPECT_HEIGHT_PX.toDouble() / 2.0
+const val FPV_HALF_HEIGHT_PX = FPV_HALF_HEIGHT_PX_DOUBLE.toInt()
+const val FPV_INVERSE_WIDTH_PX = 1.0 / FPV_ASPECT_WIDTH_PX
+const val MAX_TEXTURE_X = TEXTURE_WIDTH - 1
+const val MAX_TEXTURE_Y = TEXTURE_HEIGHT - 1
+
+// Raycasting multithreading stripe sizes
+// + 1 so last stripe may be smaller than others
+val CPU_CORES_AVAILABLE = Runtime.getRuntime().availableProcessors()
+val FLOOR_CEIL_STRIPE_SIZE = FPV_HALF_HEIGHT_PX / CPU_CORES_AVAILABLE + 1
+val WALL_STRIPE_SIZE = FPV_ASPECT_WIDTH_PX / CPU_CORES_AVAILABLE + 1
 
 val STRAFE_KEY_ANGLES = mapOf(
     KeyCode.W     to 0.0,
@@ -53,31 +79,12 @@ val ROTATION_KEY_SIGNS = mapOf(
     KeyCode.Q to -1.0,
 )
 
-const val FPV_ASPECT_WIDTH_PX = 800
-const val FPV_ASPECT_HEIGHT_PX = 400
-val FPV_ASPECT_CENTER = Vec2Int(FPV_ASPECT_WIDTH_PX / 2, FPV_ASPECT_HEIGHT_PX / 2)
-const val FPV_SCALE = 1
-const val FPV_WIDTH_PX = FPV_ASPECT_WIDTH_PX * FPV_SCALE
-const val FPV_HEIGHT_PX = FPV_ASPECT_HEIGHT_PX * FPV_SCALE
-
-const val LOG_PERFORMANCE_METRICS = false
-
-// Raycasting constants so we don't have to recompute them over and over
-const val FPV_HALF_HEIGHT_PX_DOUBLE = FPV_ASPECT_HEIGHT_PX.toDouble() / 2.0
-const val FPV_HALF_HEIGHT_PX = FPV_HALF_HEIGHT_PX_DOUBLE.toInt()
-const val FPV_INVERSE_WIDTH_PX = 1.0 / FPV_ASPECT_WIDTH_PX
-const val MAX_TEXTURE_X = TEXTURE_WIDTH - 1
-const val MAX_TEXTURE_Y = TEXTURE_HEIGHT - 1
-
-// Raycasting multithreading stripe sizes
-// + 1 so last stripe may be smaller than others
-val FLOOR_CEIL_STRIPE_SIZE = FPV_HALF_HEIGHT_PX / CPU_CORES_AVAILABLE + 1
-val WALL_STRIPE_SIZE = FPV_ASPECT_WIDTH_PX / CPU_CORES_AVAILABLE + 1
-
-fun Double.format(scale: Int) = "%.${scale}f".format(this)
-
 data class Ray(val end: Vec2Double, val index: Int) {
     val endBlock = end.toVec2Int()
+}
+
+enum class WallType {
+    NorthSouth, EastWest
 }
 
 class Player {
@@ -95,12 +102,6 @@ class Player {
         camPlane = MutableVec2Double(newDirection.rotate(PI / 2))
     }
 }
-
-enum class WallType {
-    NorthSouth, EastWest
-}
-
-const val USE_TEXTURES = true
 
 class Raycaster : Application() {
     private val keyMap: MutableMap<KeyCode, Boolean> = (STRAFE_KEY_ANGLES.keys + ROTATION_KEY_SIGNS.keys).associateWith { false }
