@@ -1,14 +1,16 @@
 package edu.cwru.raycaster
 
 import javafx.application.Application
+import javafx.geometry.Insets
+import javafx.geometry.Pos
 import javafx.scene.Cursor
 import javafx.scene.Scene
 import javafx.scene.control.Label
 import javafx.scene.input.KeyCode
-import javafx.scene.layout.HBox
-import javafx.scene.layout.VBox
+import javafx.scene.layout.*
 import javafx.scene.paint.Color
 import javafx.scene.robot.Robot
+import javafx.scene.text.Font
 import javafx.stage.Stage
 import kotlinx.coroutines.*
 import kotlin.math.PI
@@ -125,43 +127,56 @@ class Raycaster : Application() {
         primaryStage = stage
         primaryStage.title = "Kotlin Raycaster"
 
-        val root = VBox()
-        root.children.add(frameRateLabel)
+        val padding20 = Insets(20.0, 20.0, 20.0, 20.0)
 
-        val viewBox = HBox()
-        root.children.add(viewBox)
-        viewBox.children.add(topDownCanvas)
-        viewBox.children.add(firstPersonCanvas)
-
-        primaryStage.scene = Scene(root, map.mapWidthPx + FPV_WIDTH_PX + 10.0, FPV_HEIGHT_PX + 50.0)
-
-        primaryStage.scene.setOnKeyPressed {
-            if (it.code in keyMap.keys) {
-                keyMap[it.code] = true
-            }
-            else if (it.code == KeyCode.ESCAPE) {
-                escaped = true
-            }
-        }
-        primaryStage.scene.setOnKeyReleased {
-            if (it.code in keyMap.keys) {
-                keyMap[it.code] = false
-            }
+        val root = VBox().apply {
+            background = Background(BackgroundFill(Color.BLACK, CornerRadii(0.0), Insets(0.0)))
+            children.add(frameRateLabel.apply {
+                textFill = Color.WHITE
+                font = Font(20.0)
+                padding = padding20
+            })
+            children.add(HBox().apply {
+                children.add(StackPane().apply {
+                    children.add(topDownCanvas.apply { alignment = Pos.CENTER })
+                    padding = padding20
+                })
+                children.add(StackPane().apply {
+                    children.add(firstPersonCanvas.apply { alignment = Pos.CENTER })
+                    padding = padding20
+                })
+            })
         }
 
-        if (USE_MOUSE_INPUT) {
-            primaryStage.scene.cursor = Cursor.NONE
-            centerMouse()
-            primaryStage.scene.setOnMouseMoved {
-                if (recenteringMouse || escaped) {
-                    recenteringMouse = false
-                    return@setOnMouseMoved
+        primaryStage.scene = Scene(root, map.mapWidthPx + FPV_WIDTH_PX + 4 * 20.0, FPV_HEIGHT_PX + 200.0).apply {
+            setOnKeyPressed {
+                if (it.code in keyMap.keys) {
+                    keyMap[it.code] = true
                 }
+                else if (it.code == KeyCode.ESCAPE) {
+                    escaped = true
+                }
+            }
+            setOnKeyReleased {
+                if (it.code in keyMap.keys) {
+                    keyMap[it.code] = false
+                }
+            }
 
-                player.mouseDx = (it.screenX - (primaryStage.x + primaryStage.width / 2)) / (primaryStage.width / 2)
-
-                recenteringMouse = true
+            if (USE_MOUSE_INPUT) {
+                cursor = Cursor.NONE
                 centerMouse()
+                setOnMouseMoved {
+                    if (recenteringMouse || escaped) {
+                        recenteringMouse = false
+                        return@setOnMouseMoved
+                    }
+
+                    player.mouseDx = (it.screenX - (primaryStage.x + primaryStage.width / 2)) / (primaryStage.width / 2)
+
+                    recenteringMouse = true
+                    centerMouse()
+                }
             }
         }
 
