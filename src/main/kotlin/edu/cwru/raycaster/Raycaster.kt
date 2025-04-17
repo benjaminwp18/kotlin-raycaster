@@ -91,6 +91,7 @@ class Player {
     var position = MutableVec2Double(2.0, 2.0)
     var direction = MutableVec2Double(-1.0, 0.0)
     var camPlane = MutableVec2Double(direction.rotate(PI / 2))
+    var mouseDx = 0.0
     val debugRays = mutableListOf<Ray>()
 
     val positionPx: Vec2Int
@@ -157,8 +158,7 @@ class Raycaster : Application() {
                     return@setOnMouseMoved
                 }
 
-                val normalizedDx = (it.screenX - (primaryStage.x + primaryStage.width / 2)) / (primaryStage.width / 2)
-                player.rotate(normalizedDx * PLAYER_MOUSE_TURN_RATE)
+                player.mouseDx = (it.screenX - (primaryStage.x + primaryStage.width / 2)) / (primaryStage.width / 2)
 
                 recenteringMouse = true
                 centerMouse()
@@ -188,7 +188,7 @@ class Raycaster : Application() {
 
                 updateState(deltaSec)
                 if (LOG_PERFORMANCE_METRICS) {
-                    var time2 = System.currentTimeMillis()
+                    time2 = System.currentTimeMillis()
                     println("State update used: ${time2 - time1}")
                     time1 = time2
                 }
@@ -216,7 +216,6 @@ class Raycaster : Application() {
                 if (LOG_PERFORMANCE_METRICS) {
                     time2 = System.currentTimeMillis()
                     println("FPV buffer draw used: ${time2 - time1}")
-                    time1 = time2
                 }
             }
         }
@@ -230,6 +229,9 @@ class Raycaster : Application() {
     }
 
     private fun updateState(deltaSec: Double) {
+        player.rotate(player.mouseDx * PLAYER_MOUSE_TURN_RATE)
+        player.mouseDx = 0.0
+
         // Don't walk through walls
         for ((key, pressed) in keyMap) {
             if (pressed) {
@@ -376,7 +378,7 @@ class Raycaster : Application() {
         }
     }
 
-    fun applyFlashlight(color: Color, screenX: Int, screenY: Int, distance: Double): Color {
+    private fun applyFlashlight(color: Color, screenX: Int, screenY: Int, distance: Double): Color {
         // Shortcut to skip calculations if we're completely out of range
         if (ENABLE_FLASHLIGHT_FOG && FLASHLIGHT_PENETRATION_BLOCKS < distance) {
             return Color.BLACK
