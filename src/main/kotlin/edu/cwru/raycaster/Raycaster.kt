@@ -436,7 +436,8 @@ class Raycaster : Application() {
                             sideDist.x += deltaDist.x
                             rayMapPos.x += step.x
                             hitSide = WallType.EastWest
-                        } else {
+                        }
+                        else {
                             sideDist.y += deltaDist.y
                             rayMapPos.y += step.y
                             hitSide = WallType.NorthSouth
