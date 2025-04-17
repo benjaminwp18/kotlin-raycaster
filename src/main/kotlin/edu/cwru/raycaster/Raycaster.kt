@@ -47,7 +47,7 @@ const val TOP_DOWN_SIZE_PX = TOP_DOWN_SIZE_BLOCKS * PX_PER_BLOCK
 val TOP_DOWN_CLEAR_COLOR = Color.DARKBLUE
 
 // Size before scaling:
-const val FPV_ASPECT_WIDTH_PX = 800
+const val FPV_ASPECT_WIDTH_PX = 900
 const val FPV_ASPECT_HEIGHT_PX = 500
 val FPV_ASPECT_CENTER = Vec2Int(FPV_ASPECT_WIDTH_PX / 2, FPV_ASPECT_HEIGHT_PX / 2)
 
@@ -98,9 +98,6 @@ class Player {
     var camPlane = MutableVec2Double(direction.rotate(PI / 2))
     var mouseDx = 0.0
     val debugRays = mutableListOf<Ray>()
-
-    val positionPx: Vec2Int
-        get() = (position * PX_PER_BLOCK.toDouble()).toVec2Int()
 
     fun rotate(angle: Double) {
         val newDirection = direction.rotate(angle)

@@ -53,7 +53,7 @@ fun generateDungeonString(
     roomAttempts: Int = 5,
     minRoomWidth: Int = 6, maxRoomWidth: Int = 8,
     minRoomHeight: Int = 4, maxRoomHeight: Int = 6,
-    wallChars: List<Char> = listOf('B', 'R', 'G', 'M', 'E')
+    wallChars: List<Char> = listOf('B', 'R', 's', 'M', 'W')
 ): String {
     val dungeon = generateMaze(width, height)
 
@@ -93,6 +93,8 @@ fun generateDungeonString(
             }
         }
     }
+
+    dungeon[Random.nextInt(0, dungeon.size)][Random.nextInt(0, dungeon[0].size)] = 'E'
 
     return dungeon.joinToString("\n") { row ->
         row.map { if (it == '#') ' ' else it }
